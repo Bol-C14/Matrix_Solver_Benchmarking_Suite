@@ -1,11 +1,4 @@
-from device import Resistor
-from device import Capacitor
-from device import NMOS
-from device import PMOS
-from device import Vs
-from device import Is
-from device import Diode
-from device import OpAmp
+from lib.random_circuit_generator.utils.device import *
 
 class NANDGate:
     number_of_internalNodes = 3 + 4 * 4 - 1
