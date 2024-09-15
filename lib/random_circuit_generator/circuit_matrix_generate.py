@@ -6,15 +6,15 @@ import inspect
 import numpy as np
 import os
 import argparse
-from MyNode import MyNode
+from lib.random_circuit_generator.utils.nodes import MyNode
 from lib.random_circuit_generator.utils.device import Vs
 from collections import defaultdict
 from scipy.sparse import coo_matrix
 
 # Load external circuit modules
 circuit_module = importlib.import_module("utils.model")
-circuit_module_analog = importlib.import_module("utils.AnalogModels")
-circuit_module_digital = importlib.import_module("utils.DigitalModels")
+circuit_module_analog = importlib.import_module("utils.analog_models")
+circuit_module_digital = importlib.import_module("utils.digital_models")
 
 
 def load_module_classes(module):

@@ -1,0 +1,1 @@
+sudo apt update && sudo apt install unzip build-essential python3-pandas hwloc -y
