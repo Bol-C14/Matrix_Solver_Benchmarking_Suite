@@ -1,6 +1,8 @@
 #!/bin/bash
 
 echo "Start installing prerequisite packages...... Access to internet is required."
+echo "This script is written based on the requirement stated at https://xyce.sandia.gov/documentation-tutorials/building-guide/#instPreLibs"
+echo "Script only tested on Ubuntu 24.04 LTS"
 
 # Update the package list
 sudo apt-get update
