@@ -8,16 +8,11 @@ import logging
 from tqdm import tqdm  # Import tqdm for the progress bar
 import psutil
 
-# Set up logging to log both to the console and a file
-logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s - %(levelname)s - %(message)s',
-                    handlers=[
-                        logging.FileHandler('klu_kernel.log'),
-                        logging.StreamHandler()
-                    ])
-
 class KluBenchmark:
     def __init__(self, engine, database_folder, timeout=100):
+        """
+        Initialize the KluBenchmark class with the engine path, database folder, and timeout.
+        """
         self.engine = engine
         self.database_folder = Path(database_folder)
         self.timeout = timeout
@@ -27,6 +22,9 @@ class KluBenchmark:
         self.mtxs = []
 
     def run_single(self, engine, nrhs, filename, bmatrix, reps):
+        """
+        Run a single benchmark command for KLU on the given matrix file.
+        """
         try:
             command = [engine, str(nrhs), filename, bmatrix, str(reps)]
             logging.info(f"Running command: {' '.join(command)}")
@@ -40,9 +38,8 @@ class KluBenchmark:
                 time2 = float(out_lines[-2].split(':')[1])
             else:
                 logging.warning(f"Error running command: {p.stderr.decode('utf-8')}")
-                out_lines = (p.stdout).decode('utf-8').split('\n')
-                time1 = float(out_lines[-3].split(':')[1])
-                time2 = float(out_lines[-2].split(':')[1])
+                time1 = -1
+                time2 = -1
 
         except subprocess.TimeoutExpired:
             logging.warning(f"Command timed out: {' '.join(command)}")
@@ -52,6 +49,9 @@ class KluBenchmark:
         return time1, time2
 
     def find_mtx_files(self):
+        """
+        Find all matrix (.mtx) files in the database folder.
+        """
         if not self.database_folder.exists():
             logging.error(f"Directory {self.database_folder} does not exist!")
             raise FileNotFoundError(f"Directory {self.database_folder} does not exist!")
@@ -65,15 +65,20 @@ class KluBenchmark:
             logging.warning("No .mtx files found in the directory!")
 
     def custom_sort(self, matrix_name):
+        """
+        Custom sorting function for matrix filenames.
+        """
         parts = matrix_name.split('_')
         return int(parts[2]), int(parts[3])
 
     def run_benchmark(self):
+        """
+        Run the benchmark on all found matrix files and save the results to a CSV file.
+        """
         self.mtxs = sorted(self.mtxs, key=self.custom_sort)
         reps = np.ones(len(self.mtxs), dtype=int) * 100
 
         for i in tqdm(range(len(self.mtxs)), desc="Processing Matrices"):
-            print(f"Memory used: {psutil.virtual_memory().percent}%")
             filepath = str(self.database_folder / (self.mtxs[i] + '.mtx'))
             bmatrix = str(self.database_folder / self.mtxs[i] / 'vecb.mtx')
 
@@ -82,12 +87,11 @@ class KluBenchmark:
                 matrix = sio.mmread(filepath)
                 nnz = matrix.nnz
                 num_rows, _ = matrix.shape
-                print(f"Memory used: {psutil.virtual_memory().percent}%")
+
                 logging.info(f"Running analysis on {filepath} with {nnz} non-zero elements and {num_rows} rows")
                 t1, t2 = self.run_single(self.engine, 1, filepath, bmatrix, reps[i])
 
                 self.df.loc[i] = [i, self.mtxs[i], 'KLU', 1, nnz, num_rows, t1, t2]
-                print(f"Memory used: {psutil.virtual_memory().percent}%")
                 logging.info(f"Finished processing {filepath}: Analyze time = {t1}, Factorization time = {t2}")
 
             except Exception as e:
@@ -99,6 +103,7 @@ class KluBenchmark:
         logging.info('Results saved to results_klu_kernel.csv')
         print('done!')
 
+# Example usage of the class
 if __name__ == "__main__":
     engine = './klu_kernel.o'
     database_folder = "/mnt/c/Work/transient-simulation/Random_Circuit_Generator/random_circuit_matrixs"
