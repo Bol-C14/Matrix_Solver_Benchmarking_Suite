@@ -159,37 +159,51 @@ def build_modules(graph, num_nodes, a_matrix, b_matrix):
 
     return a_matrix, b_matrix
 
+
 def write_to_mtx(a_matrix, b_matrix, file_path, num_rows):
-    """
-    Write the a_matrix to a Matrix Market file and plot the sparse matrix.
-    """
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
+    # Sort the list of dictionaries by y and then by x
     a_matrix = sorted(a_matrix, key=lambda coord: (coord['y'], coord['x']))
+
+    # Iterate over the dictionaries in the list
     result_dict = defaultdict(float)
     for d in a_matrix:
+        # Use tuple (x, y) as a key for the dictionary and add the value to the current sum
         result_dict[(d['x'], d['y'])] += d['value']
-
     a_matrix = [{"x": x, "y": y, "value": v} for (x, y), v in result_dict.items()]
-    total_nonzero_elements = len(a_matrix)
+    Total_nonzero_elements = len(a_matrix)
+
+    # Validate num_rows
+    max_x = max(item['x'] for item in a_matrix) if a_matrix else 0
+    max_y = max(item['y'] for item in a_matrix) if a_matrix else 0
+    actual_max = max(max_x, max_y)
+
+    if num_rows < actual_max:
+        logging.warning(f"num_rows ({num_rows}) is less than the maximum index ({actual_max}). Adjusting num_rows.")
+        num_rows = actual_max
 
     with open(file_path, 'w') as file:
+        # Write the Matrix Market header
         file.write("%%MatrixMarket matrix coordinate real general\n")
-        file.write(f"{num_rows} {num_rows} {total_nonzero_elements}\n")
+        file.write(f"{num_rows} {num_rows} {Total_nonzero_elements}\n")
+
+        # Write the coordinate values
         for i in a_matrix:
-            file.write(f"{i['x']} {i['y']} {i['value']}\n")
+            x = i['x']
+            y = i['y']
+            value = i['value']
+            file.write(f"{x} {y} {value}\n")
 
-    x = [item['x'] for item in a_matrix]
-    y = [item['y'] for item in a_matrix]
-    data = [item['value'] for item in a_matrix]
-
-    sparse_matrix = coo_matrix((data, (x, y)))
+    # Optionally, log the maximum indices
+    logging.info(f"Writing matrix with num_rows={num_rows}, max_x={max_x}, max_y={max_y}")
 
     ###
     # Commented out the plotting of the sparse matrix to accelerate generation
     # plt.spy(sparse_matrix, markersize=1)
     # plt.savefig(file_path.replace('.mtx', '_spy.png'), dpi=600)
     # plt.close()
+
 
 def generate_and_write(node_number, iteration, output_dir):
     """
@@ -199,10 +213,18 @@ def generate_and_write(node_number, iteration, output_dir):
         extra_connections = node_number // 4
         graph = generate_circuit(node_number, extra_connections)
         assign_modules_to_nodes(graph)
-        num_rows = assign_start_index(graph)
+
+        # Assign start index and adjust num_rows
+        start_index = assign_start_index(graph)
+        num_rows = start_index - 1  # Correcting the off-by-one error
+
+        # Build modules with the correct number of rows
         a_matrix, b_matrix = build_modules(graph, num_rows, [], [])
 
+        # Define the filename with proper iteration count
         filename = os.path.join(output_dir, f'random_circuit_{node_number}_{iteration + 1}.mtx')
+
+        # Write the matrix to the .mtx file
         write_to_mtx(a_matrix, b_matrix, filename, num_rows)
 
         logging.info(f"Generated matrices for {node_number} nodes (Iteration {iteration + 1})")
@@ -210,6 +232,7 @@ def generate_and_write(node_number, iteration, output_dir):
     except Exception as e:
         logging.error(f"Error generating circuit for {node_number} nodes (Iteration {iteration + 1}): {e}")
         return False
+
 
 def run_circuit_generation(node_of_iterations=2, node_range_1=(5, 100, 5), node_range_2=(100, 2000, 20), output_dir="generated_circuits"):
     """
