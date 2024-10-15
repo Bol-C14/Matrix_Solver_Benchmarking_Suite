@@ -1,21 +1,24 @@
+import importlib
+import inspect
 import networkx as nx
 import random
 import matplotlib.pyplot as plt
-import importlib
-import inspect
 import numpy as np
 import os
 import argparse
-from lib.random_circuit_generator.utils.nodes import MyNode
-from lib.random_circuit_generator.utils.device import Vs
+import logging
 from collections import defaultdict
 from scipy.sparse import coo_matrix
+from lib.random_circuit_generator.utils.nodes import MyNode
+from lib.random_circuit_generator.utils.device import Vs
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from functools import partial
+from tqdm import tqdm
 
 # Load external circuit modules
-circuit_module = importlib.import_module("utils.model")
-circuit_module_analog = importlib.import_module("utils.analog_models")
-circuit_module_digital = importlib.import_module("utils.digital_models")
-
+circuit_module = importlib.import_module(".utils.model", package="lib.random_circuit_generator")
+circuit_module_analog = importlib.import_module(".utils.analog_models", package="lib.random_circuit_generator")
+circuit_module_digital = importlib.import_module(".utils.digital_models", package="lib.random_circuit_generator")
 
 def load_module_classes(module):
     """
@@ -24,12 +27,10 @@ def load_module_classes(module):
     return [obj for name, obj in inspect.getmembers(module) if
             inspect.isclass(obj) and obj.__module__ == module.__name__]
 
-
 # Load classes from each module
 target_model_library = load_module_classes(circuit_module)
 modules_analog = load_module_classes(circuit_module_analog)
 modules_digital = load_module_classes(circuit_module_digital)
-
 
 def generate_circuit(num_nodes, extra_connections):
     """
@@ -65,7 +66,6 @@ def generate_circuit(num_nodes, extra_connections):
 
     return graph
 
-
 def visualize_graph(graph, output_file="node_graph.png"):
     """
     Visualizes the directed graph using matplotlib.
@@ -93,7 +93,6 @@ def visualize_graph(graph, output_file="node_graph.png"):
     plt.savefig(output_file, dpi=600)
     plt.show()
 
-
 def assign_modules_to_nodes(graph):
     """
     Assigns modules from the target model library to nodes based on their in-degree.
@@ -110,9 +109,8 @@ def assign_modules_to_nodes(graph):
             chosen_class = random.choice(possible_classes)
             node.assign_chosen_module(chosen_class)
         else:
-            print(f"Node {node.id} has no possible classes")
-            exit(1)
-
+            logging.error(f"Node {node.id} has no possible classes")
+            raise ValueError(f"Node {node.id} has no possible classes")
 
 def assign_voltage_sources(graph, num_nodes, a_matrix, b_matrix):
     """
@@ -125,7 +123,6 @@ def assign_voltage_sources(graph, num_nodes, a_matrix, b_matrix):
             node.my_module.assign_voltage_node(1)
     return a_matrix, b_matrix
 
-
 def assign_start_index(graph):
     """
     Assigns start indexes to nodes using DFS traversal.
@@ -133,12 +130,11 @@ def assign_start_index(graph):
     start_index = 1
     for node in nx.dfs_preorder_nodes(graph):
         if node.number_of_internalNodes is None:
-            print(f"Node {node.id} has not been assigned a number_of_internalNodes value")
+            logging.warning(f"Node {node.id} has not been assigned a number_of_internalNodes value")
             continue
         node.assign_start_index(start_index)
         start_index += node.number_of_internalNodes
     return start_index
-
 
 def build_modules(graph, num_nodes, a_matrix, b_matrix):
     """
@@ -162,7 +158,6 @@ def build_modules(graph, num_nodes, a_matrix, b_matrix):
         b_matrix.extend(b)
 
     return a_matrix, b_matrix
-
 
 def write_to_mtx(a_matrix, b_matrix, file_path, num_rows):
     """
@@ -189,34 +184,81 @@ def write_to_mtx(a_matrix, b_matrix, file_path, num_rows):
     data = [item['value'] for item in a_matrix]
 
     sparse_matrix = coo_matrix((data, (x, y)))
-    plt.spy(sparse_matrix, markersize=1)
 
+    ###
+    # Commented out the plotting of the sparse matrix to accelerate generation
+    # plt.spy(sparse_matrix, markersize=1)
+    # plt.savefig(file_path.replace('.mtx', '_spy.png'), dpi=600)
+    # plt.close()
+
+def generate_and_write(node_number, iteration, output_dir):
+    """
+    Generates a single circuit and writes its matrix to a file.
+    """
+    try:
+        extra_connections = node_number // 4
+        graph = generate_circuit(node_number, extra_connections)
+        assign_modules_to_nodes(graph)
+        num_rows = assign_start_index(graph)
+        a_matrix, b_matrix = build_modules(graph, num_rows, [], [])
+
+        filename = os.path.join(output_dir, f'random_circuit_{node_number}_{iteration + 1}.mtx')
+        write_to_mtx(a_matrix, b_matrix, filename, num_rows)
+
+        logging.info(f"Generated matrices for {node_number} nodes (Iteration {iteration + 1})")
+        return True
+    except Exception as e:
+        logging.error(f"Error generating circuit for {node_number} nodes (Iteration {iteration + 1}): {e}")
+        return False
 
 def run_circuit_generation(node_of_iterations=2, node_range_1=(5, 100, 5), node_range_2=(100, 2000, 20), output_dir="generated_circuits"):
     """
-    Generates circuits and writes corresponding matrices to files.
+    Generates circuits and writes corresponding matrices to files using multi-processing.
     """
-    a_matrix, b_matrix = [], []
+    os.makedirs(output_dir, exist_ok=True)
     node_numbers = np.concatenate((np.arange(*node_range_1), np.arange(*node_range_2)))
+    total_tasks = node_of_iterations * len(node_numbers)
+    success_count = 0
 
+    # Prepare all tasks
+    tasks = []
     for i in range(node_of_iterations):
         for node_number in node_numbers:
-            extra_connections = node_number // 4
-            graph = generate_circuit(node_number, extra_connections)
-            assign_modules_to_nodes(graph)
-            num_rows = assign_start_index(graph)
-            a_matrix, b_matrix = build_modules(graph, num_rows, a_matrix, b_matrix)
+            tasks.append((node_number, i, output_dir))
 
-            filename = os.path.join(output_dir, f'random_circuit_{node_number}_{i + 1}.mtx')
-            write_to_mtx(a_matrix, b_matrix, filename, num_rows)
+    # Use ProcessPoolExecutor for parallel processing
+    with ProcessPoolExecutor() as executor:
+        # Initialize tqdm progress bar
+        with tqdm(total=total_tasks, desc="Generating Circuits") as pbar:
+            # Submit all tasks
+            future_to_task = {executor.submit(generate_and_write, *task): task for task in tasks}
 
-            a_matrix.clear()
-            b_matrix.clear()
-            print(f"Generated matrices for {node_number} nodes")
+            for future in as_completed(future_to_task):
+                task = future_to_task[future]
+                try:
+                    result = future.result()
+                    if result:
+                        success_count += 1
+                except Exception as exc:
+                    logging.error(f"Task {task} generated an exception: {exc}")
+                finally:
+                    pbar.update(1)
 
-    print("Circuit generation completed.")
-    print(f"Total number of matrices generated: {node_of_iterations * len(node_numbers)}")
+    logging.info("Circuit generation completed.")
+    logging.info(f"Total number of matrices generated: {success_count}/{total_tasks}")
 
+def setup_logging(log_file='circuit_generation.log'):
+    """
+    Sets up the logging configuration.
+    """
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s [%(levelname)s] %(message)s',
+        handlers=[
+            logging.FileHandler(log_file),
+            logging.StreamHandler()
+        ]
+    )
 
 def main():
     parser = argparse.ArgumentParser(description="Random Circuit Matrix Generator")
@@ -224,17 +266,21 @@ def main():
     parser.add_argument('--node_range_1', type=int, nargs=3, default=[5, 100, 5], help='Node range 1 (start, end, step)')
     parser.add_argument('--node_range_2', type=int, nargs=3, default=[100, 2000, 20], help='Node range 2 (start, end, step)')
     parser.add_argument('--output_dir', type=str, default="generated_circuits", help='Output directory for matrix files')
+    parser.add_argument('--log_file', type=str, default='circuit_generation.log', help='Log file path')
 
     args = parser.parse_args()
 
+    setup_logging(args.log_file)
+
     run_circuit_generation(
         node_of_iterations=args.iterations,
-        node_range_1=args.node_range_1,
-        node_range_2=args.node_range_2,
+        node_range_1=tuple(args.node_range_1),
+        node_range_2=tuple(args.node_range_2),
         output_dir=args.output_dir
     )
 
-
+    logging.info(
+         logging.info(f"Total number of matrices generated: {args.iterations * len(np.concatenate((np.arange(*args.node_range_1), np.arange(*args.node_range_2))))}"))
 # Example usage
 if __name__ == "__main__":
     main()
