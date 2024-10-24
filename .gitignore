@@ -6,3 +6,7 @@
 *.csv
 *.csv
 *.csv
+*.o
+/lib/superlu/src/DOC
+/lib/superlu
+/lib/klu_new

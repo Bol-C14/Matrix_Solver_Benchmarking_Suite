@@ -106,7 +106,7 @@ def process_matrices():
     mtxs = sorted(mtxs, key=custom_sort)
 
     # Set repetitions for each matrix
-    reps = np.ones(len(mtxs), dtype=int) * 20
+    reps = np.ones(len(mtxs), dtype=int) * 1
 
     # Processing loop with tqdm progress bar
     for i in tqdm(range(len(mtxs)), desc="Processing Matrices"):

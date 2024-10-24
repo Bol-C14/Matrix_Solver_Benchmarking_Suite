@@ -76,7 +76,7 @@ class KluBenchmark:
         Run the benchmark on all found matrix files and save the results to a CSV file.
         """
         self.mtxs = sorted(self.mtxs, key=self.custom_sort)
-        reps = np.ones(len(self.mtxs), dtype=int) * 100
+        reps = np.ones(len(self.mtxs), dtype=int) * 5
 
         for i in tqdm(range(len(self.mtxs)), desc="Processing Matrices"):
             filepath = str(self.database_folder / (self.mtxs[i] + '.mtx'))

@@ -2,25 +2,17 @@
 CC = g++
 CXX = g++
 
+# Paths
+SUPERLU_DIR = ./src/superlu_kernel
+BUILD_DIR = $(SUPERLU_DIR)/build
+INCLUDE_DIRS = -I$(BUILD_DIR)/include -I$(SUPERLU_DIR)/SRC -I./include
+
 # Library paths and linking settings
-CLIB = -L./src/build/lib -lsuperlu -lblas -lm
-INCL = -I./src/build/include -I./src/SRC -I./include
+LIB_DIRS = -L$(BUILD_DIR)/lib
+LIBS = -lsuperlu -lblas -lm
 
 # Compiler flags
-# -g includes debugging information.
-# -O0 disables optimization for easier debugging.
-STD = -std=c++17 -march=native -mtune=native -g -O0
-
-# Clean command for removing build artifacts
-CLEAN = rm -rf *.o *.a superlu_kernel
-
-# Build targets
-.PHONY: library clean all
-
-# Build SuperLU libraries and dependencies
-library:
-	@echo "Building SuperLU libraries..."
-	(cd src/build && $(MAKE))
+CXXFLAGS = -std=c++17 -g -O0
 
 # Source files
 SRC = superlu_kernel.cpp
@@ -29,18 +21,27 @@ SRC = superlu_kernel.cpp
 OBJ = $(SRC:.cpp=.o)
 
 # Default target: build SuperLU libraries and the program
-all: superlu_kernel
+all: library superlu_kernel
+
+# Build SuperLU libraries
+library:
+	@echo "Building SuperLU libraries..."
+	$(MAKE) -C $(BUILD_DIR)
 
 # Rule for building the superlu_kernel program
-superlu_kernel: $(OBJ) library
+superlu_kernel: $(OBJ)
 	@echo "Compiling superlu_kernel..."
-	$(CXX) $(INCL) $(STD) $(OBJ) -o superlu_kernel $(CLIB)
+	$(CXX) $(INCLUDE_DIRS) $(CXXFLAGS) $(OBJ) -o $@ $(LIB_DIRS) $(LIBS)
+
+# Rule for building object files
+%.o: %.cpp
+	$(CXX) $(INCLUDE_DIRS) $(CXXFLAGS) -c $< -o $@
 
 # Clean target
 clean:
 	@echo "Cleaning up..."
 	rm -f $(OBJ) superlu_kernel
-	$(CLEAN)
+	$(MAKE) -C $(BUILD_DIR) clean
 
 # Phony targets to avoid conflicts with files named "clean" or "all"
-.PHONY: all clean
+.PHONY: all clean library
