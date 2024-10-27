@@ -25,9 +25,9 @@ console = Console()
 
 
 # Load the modules
-circuit_module = importlib.import_module("model")
-circuit_module_analog = importlib.import_module("AnalogModels")
-circuit_module_digital = importlib.import_module("DigitalModels")
+circuit_module = importlib.import_module(".model", package="lib.random_circuit_generator")
+circuit_module_analog = importlib.import_module(".AnalogModels", package="lib.random_circuit_generator")
+circuit_module_digital = importlib.import_module(".DigitalModels", package="lib.random_circuit_generator")
 
 # Specify the modules to be used
 modules = [obj for name, obj in inspect.getmembers(circuit_module) if
