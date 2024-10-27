@@ -1,6 +1,6 @@
 import numpy as np
 import logging
-from lib.random_circuit_generator.GraphGenerator import run_circuit_generation
+from lib.random_circuit_generator import run_circuit_generation
 from lib.klu_new.run_klu_kernels import KluBenchmark
 import sys
 from pathlib import Path
