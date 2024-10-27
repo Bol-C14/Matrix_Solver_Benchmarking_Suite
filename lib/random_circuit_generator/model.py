@@ -1,13 +1,14 @@
 import random
 from collections import defaultdict
-from device import Resistor
-from device import Capacitor
-from device import NMOS
-from device import PMOS
-from device import Vs
-from device import Is
-from device import Diode
-from device import OpAmp
+from .device import Resistor
+from .device import Capacitor
+from .device import NMOS
+from .device import PMOS
+from .device import Vs
+from .device import Is
+from .device import Diode
+from .device import OpAmp
+
 
 
 class Second_order_RC:
