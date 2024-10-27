@@ -3,7 +3,7 @@ CC = g++
 CXX = g++
 
 # Library paths and linking settings
-CLIB = -L./SuiteSparse-stable/KLU -lklu -lamd -lbtf -lsuitesparseconfig -lm
+CLIB = -L./SuiteSparse-stable/lib -lklu -lamd -lbtf -lsuitesparseconfig -lm
 INCL = -I./include -I./SuiteSparse-stable/KLU/include -I./SuiteSparse-stable/AMD/Include -I./SuiteSparse-stable/BTF/Include -I./SuiteSparse-stable/COLAMD/Include -I./SuiteSparse-stable/SuiteSparse_config
 
 # Compiler flags
