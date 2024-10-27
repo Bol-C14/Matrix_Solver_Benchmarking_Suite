@@ -1,35 +1,48 @@
 import os
+import numpy as np
 import logging
-from lib.random_circuit_generator.circuit_matrix_generate import run_circuit_generation, setup_logging
+from pathlib import Path
 
-def main():
-    # Define the parameters for circuit generation
-    iterations = 10  # Increase iterations to cover more matrices
-    node_range_1 = (5, 200, 5)  # First node range: (start, end, step)
-    node_range_2 = (200, 10000, 100)  # Second node range: (start, end, step)
+# Import the relevant classes and functions from your modules
+from lib.random_circuit_generator.GraphGenerator import run_circuit_generation
+from lib.klu_new.run_klu_kernels import KluBenchmark
 
-    # Set the output directory to save the generated matrices
-    output_dir = "data/circuit_data/raw"
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger()
 
-    # Create the output directory if it does not exist
-    os.makedirs(output_dir, exist_ok=True)
+# Main script settings
+CIRCUIT_OUTPUT_DIR = Path("data/circuit_data")
+ENGINE_PATH = "./lib/klu_new/src/klu_kernel.o"
+DATABASE_FOLDER = CIRCUIT_OUTPUT_DIR
 
-    # Setup logging configuration
-    log_file = "circuit_generation.log"
-    setup_logging(log_file)  # Set up logging to file and console
+# Ensure output directories exist
+CIRCUIT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Run the circuit generation process with 8 threads
-    run_circuit_generation(
-        node_of_iterations=iterations,
-        node_range_1=node_range_1,
-        node_range_2=node_range_2,
-        output_dir=output_dir,
-    )
+# Step 1: Generate matrices and save to `data/circuit_data`
+def generate_matrices():
+    node_iterations = 10  # Number of times to iterate for each node count
+    node_numbers = np.concatenate((np.arange(5, 100, 5), np.arange(100, 1000, 50)))
 
+    logger.info(f"Generating matrices in {CIRCUIT_OUTPUT_DIR}")
+    run_circuit_generation(node_iterations, node_numbers, output_directory=CIRCUIT_OUTPUT_DIR, verbose=True)
+    logger.info("Matrix generation completed.")
 
+# Step 2: Solve and benchmark matrices using KLU
+def benchmark_matrices():
+    logger.info(f"Initializing KLU benchmark with engine: {ENGINE_PATH}")
+    klu_benchmark = KluBenchmark(ENGINE_PATH, DATABASE_FOLDER)
 
+    # Find all generated .mtx files in the database folder
+    klu_benchmark.find_mtx_files()
 
-    # using klu to solve the matrices
+    # Run the benchmark on each matrix file and save results
+    klu_benchmark.run_benchmark()
+    logger.info("Benchmarking completed.")
 
 if __name__ == "__main__":
-    main()
+    # Generate matrices
+    generate_matrices()
+
+    # Benchmark matrices
+    benchmark_matrices()
