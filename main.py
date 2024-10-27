@@ -1,11 +1,12 @@
-import os
 import numpy as np
 import logging
-from pathlib import Path
-
-# Import the relevant classes and functions from your modules
 from lib.random_circuit_generator.GraphGenerator import run_circuit_generation
 from lib.klu_new.run_klu_kernels import KluBenchmark
+import sys
+from pathlib import Path
+
+# Add lib/random_circuit_generator to sys.path
+sys.path.append(str(Path(__file__).resolve().parent / "lib" / "random_circuit_generator"))
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')

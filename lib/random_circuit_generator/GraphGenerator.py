@@ -15,6 +15,7 @@ import numpy as np
 from rich.console import Console
 import logging
 
+
 # Initialize logger
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger()
