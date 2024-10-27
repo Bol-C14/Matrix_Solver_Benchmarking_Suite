@@ -57,8 +57,8 @@ class SuperluBenchmark:
             if not scipy.sparse.issparse(matrix):
                 matrix = scipy.sparse.csr_matrix(matrix)
             end_read = time.perf_counter()
-            read_time = end_read - start_read
-            logging.info(f"Read time for {matrix_path}: {read_time:.6f} seconds")
+            read_time = (end_read - start_read) * 1000  # Convert to milliseconds
+            logging.info(f"Read time for {matrix_path}: {read_time:.6f} ms")
 
             nnz = matrix.nnz
             num_rows, _ = matrix.shape
@@ -67,15 +67,15 @@ class SuperluBenchmark:
             start_rhs = time.perf_counter()
             b = np.ones(num_rows)
             end_rhs = time.perf_counter()
-            rhs_time = end_rhs - start_rhs
-            logging.info(f"Right-hand side vector creation time for {matrix_path}: {rhs_time:.6f} seconds")
+            rhs_time = (end_rhs - start_rhs) * 1000  # Convert to milliseconds
+            logging.info(f"Right-hand side vector creation time for {matrix_path}: {rhs_time:.6f} ms")
 
             # Measure analyze time (symbolic analysis)
             start_analyze = time.perf_counter()
             # Placeholder for analysis - we can assume reading matrix is part of analysis in this case
             end_analyze = time.perf_counter()
-            analyze_time = end_analyze - start_analyze
-            logging.info(f"Analyze time for {matrix_path}: {analyze_time:.6f} seconds")
+            analyze_time = (end_analyze - start_analyze) * 1000  # Convert to milliseconds
+            logging.info(f"Analyze time for {matrix_path}: {analyze_time:.6f} ms")
 
             # Measure factorization time and solve the system
             factor_times = []
@@ -85,23 +85,23 @@ class SuperluBenchmark:
                 start_factor = time.perf_counter()
                 lu = scipy.sparse.linalg.splu(matrix)
                 end_factor = time.perf_counter()
-                factor_time = end_factor - start_factor
+                factor_time = (end_factor - start_factor) * 1000  # Convert to milliseconds
                 factor_times.append(factor_time)
-                logging.info(f"Factorization time for {matrix_path}: {factor_time:.6f} seconds")
+                logging.info(f"Factorization time for {matrix_path}: {factor_time:.6f} ms")
 
                 # Measure the time for solving the system
                 start_solve = time.perf_counter()
                 x = lu.solve(b)
                 end_solve = time.perf_counter()
-                solve_time = end_solve - start_solve
+                solve_time = (end_solve - start_solve) * 1000  # Convert to milliseconds
                 solve_times.append(solve_time)
-                logging.info(f"Solve time for {matrix_path}: {solve_time:.6f} seconds")
+                logging.info(f"Solve time for {matrix_path}: {solve_time:.6f} ms")
 
             # Calculate average times for factorization and solving
             average_factor_time = np.mean(factor_times)
             average_solve_time = np.mean(solve_times)
-            logging.info(f"Average factorization time for {matrix_path}: {average_factor_time:.6f} seconds")
-            logging.info(f"Average solve time for {matrix_path}: {average_solve_time:.6f} seconds")
+            logging.info(f"Average factorization time for {matrix_path}: {average_factor_time:.6f} ms")
+            logging.info(f"Average solve time for {matrix_path}: {average_solve_time:.6f} ms")
 
             return analyze_time, average_factor_time, nnz, num_rows, read_time, rhs_time, average_solve_time
 
