@@ -6,8 +6,8 @@ import inspect
 
 from rich.progress import Progress
 
-from MyNode import MyNode
-from device import Vs
+from .MyNode import MyNode
+from .device import Vs
 from collections import defaultdict
 from scipy.sparse import coo_matrix
 import os
