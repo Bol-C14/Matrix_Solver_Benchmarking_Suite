@@ -5,8 +5,35 @@ import scipy.io as sio
 import numpy as np
 from pathlib import Path
 import logging
-from tqdm import tqdm  # Import tqdm for the progress bar
+from tqdm import tqdm
 import psutil
+
+# Configure logging
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
+
+# File handlers for info and debug levels
+info_handler = logging.FileHandler('klu_benchmark_info.log')
+info_handler.setLevel(logging.INFO)
+
+debug_handler = logging.FileHandler('klu_benchmark_debug.log')
+debug_handler.setLevel(logging.DEBUG)
+
+# Console handler for warnings and errors
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.WARNING)
+
+# Set a common format for all handlers
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+info_handler.setFormatter(formatter)
+debug_handler.setFormatter(formatter)
+console_handler.setFormatter(formatter)
+
+# Add handlers to the logger
+logger.addHandler(info_handler)
+logger.addHandler(debug_handler)
+logger.addHandler(console_handler)
+
 
 class KluBenchmark:
     def __init__(self, engine, database_folder, timeout=100):
@@ -27,13 +54,12 @@ class KluBenchmark:
         """
         try:
             command = [engine, str(nrhs), filename, bmatrix, str(reps)]
-            logging.info(f"Running command: {' '.join(command)}")
+            logging.debug(f"Running command: {' '.join(command)} with timeout {self.timeout}")
 
             p = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=self.timeout)
 
             if p.returncode == 0:
                 out_lines = (p.stdout).decode('utf-8').split('\n')
-                logging.info(f"Command output: {out_lines}")
                 time1 = float(out_lines[-3].split(':')[1])
                 time2 = float(out_lines[-2].split(':')[1])
             else:
@@ -63,6 +89,7 @@ class KluBenchmark:
 
         if not self.mtxs:
             logging.warning("No .mtx files found in the directory!")
+        logging.debug(f"Found .mtx files: {self.mtxs}")
 
     def custom_sort(self, matrix_name):
         """
@@ -78,27 +105,31 @@ class KluBenchmark:
         self.mtxs = sorted(self.mtxs, key=self.custom_sort)
         reps = np.ones(len(self.mtxs), dtype=int) * 100
 
-        for i in tqdm(range(len(self.mtxs)), desc="Processing Matrices"):
+        logging.info(f"Starting benchmark on {len(self.mtxs)} matrices")
+
+        for i in tqdm(range(len(self.mtxs)), desc="KLU - Processing Matrices"):
             filepath = str(self.database_folder / (self.mtxs[i] + '.mtx'))
             bmatrix = str(self.database_folder / self.mtxs[i] / 'vecb.mtx')
 
             try:
-                logging.info(f"Reading matrix from {filepath}")
+                logging.debug(f"Reading matrix from {filepath}")
                 matrix = sio.mmread(filepath)
                 nnz = matrix.nnz
                 num_rows, _ = matrix.shape
 
-                logging.info(f"Running analysis on {filepath} with {nnz} non-zero elements and {num_rows} rows")
+                logging.debug(f"Running analysis on {filepath} with {nnz} non-zero elements and {num_rows} rows")
                 t1, t2 = self.run_single(self.engine, 1, filepath, bmatrix, reps[i])
 
+                # Log completion details at the DEBUG level
+                logging.debug(f"Completed {self.mtxs[i]}: Analyze = {t1}, Factorization = {t2}")
                 self.df.loc[i] = [i, self.mtxs[i], 'KLU', 1, nnz, num_rows, t1, t2]
-                logging.info(f"Finished processing {filepath}: Analyze time = {t1}, Factorization time = {t2}")
 
             except Exception as e:
                 logging.error(f"Error processing matrix {filepath}: {str(e)}")
                 continue
 
-        logging.info(f"Final DataFrame: \n{self.df}")
+        logging.info("Benchmark completed for all matrices")
+        logging.debug(f"Final DataFrame: \n{self.df}")
         self.df.to_csv('results_klu_kernel.csv', index=False)
         logging.info('Results saved to results_klu_kernel.csv')
         print('done!')

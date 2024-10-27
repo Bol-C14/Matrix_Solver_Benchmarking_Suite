@@ -7,3 +7,5 @@
 *.csv
 *.csv
 *.o
+/lib/klu_new/__pycache__
+*.log
