@@ -9,3 +9,5 @@
 *.o
 /lib/klu_new/__pycache__
 *.log
+/lib/nicslu/src/__pycache__
+/lib/nicslu/__pycache__
