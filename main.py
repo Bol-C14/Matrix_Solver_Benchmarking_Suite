@@ -43,7 +43,7 @@ CIRCUIT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # Step 1: Generate matrices and save to `data/circuit_data`
 def generate_matrices(logger):
-    node_iterations = 20  # Number of times to iterate for each node count
+    node_iterations = 1  # Number of times to iterate for each node count
     node_numbers = np.concatenate((np.arange(5, 100, 5), np.arange(100, 1000, 50)))
 
     logger.info(f"Generating matrices in {CIRCUIT_OUTPUT_DIR}")
@@ -52,8 +52,23 @@ def generate_matrices(logger):
 
 # Step 2.1: Solve and benchmark matrices using KLU
 def run_klu(logger):
-    engine_path = "./lib/klu_new/src/klu_kernel.o"   # if not found, go compile it
+    # Set library paths for KLU dependencies
+    lib_paths = [
+        "./lib/klu_new/src/SuiteSparse-stable/lib",
+        "./lib/klu_new/src/SuiteSparse-stable/KLU/build"
+    ]
+    os.environ["LD_LIBRARY_PATH"] = os.pathsep.join(lib_paths + [os.environ.get("LD_LIBRARY_PATH", "")])
 
+    # Check if the LD_LIBRARY_PATH includes the necessary paths for libklu.so.2
+    logger.info(f"LD_LIBRARY_PATH set to: {os.environ['LD_LIBRARY_PATH']}")
+
+    # Set the path to the KLU kernel executable
+    engine_path = "./lib/klu_new/src/klu_kernel.o"  # Ensure this path is correct
+    if not os.path.exists(engine_path):
+        logger.error(f"KLU engine not found at {engine_path}. Please compile it if necessary.")
+        return
+
+    # Initialize the benchmark
     logger.info(f"Initializing KLU benchmark with engine: {engine_path}")
     klu_benchmark = KluBenchmark(engine_path, DATABASE_FOLDER)
 
@@ -63,6 +78,7 @@ def run_klu(logger):
     # Run the benchmark on each matrix file and save results
     klu_benchmark.run_benchmark()
     logger.info("KLU Benchmarking completed.")
+
 
 # Step 2.2: Solve and benchmark matrices using NICSLU
 def run_nicslu(logger):

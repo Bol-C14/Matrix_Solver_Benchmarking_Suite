@@ -14,3 +14,8 @@
 /lib/superlu/__pycache__
 /lib/pardiso/__pycache__
 /lib/glu/src/__pycache__
+myenv/lib64
+myenv/pyvenv.cfg
+myenv/bin/python
+myenv/bin/python3
+myenv/bin/python3.10
