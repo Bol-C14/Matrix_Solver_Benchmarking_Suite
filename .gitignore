@@ -11,3 +11,6 @@
 *.log
 /lib/nicslu/src/__pycache__
 /lib/nicslu/__pycache__
+/lib/superlu/__pycache__
+/lib/pardiso/__pycache__
+/lib/glu/src/__pycache__

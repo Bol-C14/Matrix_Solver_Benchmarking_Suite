@@ -5,7 +5,10 @@ from pathlib import Path
 import os
 from lib.random_circuit_generator import run_circuit_generation
 from lib.klu_new.run_klu_kernels import KluBenchmark
-from lib.nicslu.src.run_nicslu_kernel import NICSLUTester  # Import the NICSLUTester class
+from lib.nicslu.src.run_nicslu_kernel import NICSLUTester
+from lib.glu.src.run_glu_kernels import GluKernelBenchmark
+from lib.pardiso.run_pardiso_kernel import PardisoKernelBenchmark
+from lib.superlu.run_superlu_kernels import SuperluBenchmark  # Import the SuperLUBenchmark class
 import argparse
 
 # Set up logging with multiple levels
@@ -40,7 +43,7 @@ CIRCUIT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # Step 1: Generate matrices and save to `data/circuit_data`
 def generate_matrices(logger):
-    node_iterations = 10  # Number of times to iterate for each node count
+    node_iterations = 20  # Number of times to iterate for each node count
     node_numbers = np.concatenate((np.arange(5, 100, 5), np.arange(100, 1000, 50)))
 
     logger.info(f"Generating matrices in {CIRCUIT_OUTPUT_DIR}")
@@ -87,8 +90,62 @@ def run_nicslu(logger):
     nicslu_tester.run(reps_value=reps_value, thread_values=thread_values)
     logger.info("NICSLU Benchmarking completed.")
 
+# Step 2.3: Solve and benchmark matrices using GLU
+def run_glu(logger):
+    engine_path = "./lib/glu/src/glu_kernel.o"  # Ensure this is correctly built if necessary
+    logger.info(f"Initializing GLU benchmark with engine: {engine_path}")
+
+    # Create an instance of GluKernelBenchmark
+    glu_benchmark = GluKernelBenchmark(
+        engine=engine_path,
+        database_folder=DATABASE_FOLDER,
+        timeout=100,
+        log_level=logging.DEBUG  # Change this as needed
+    )
+
+    # Run the benchmark
+    glu_benchmark.process_matrices()
+    logger.info("GLU Benchmarking completed.")
+
+# Step 2.4: Solve and benchmark matrices using PARDISO
+def run_pardiso(logger):
+    engine_path = "./lib/pardiso/pardiso_kernel.o"  # Ensure this is correctly compiled as an executable
+    database_folder = "./data/circuit_data"
+    timeout = 120
+    log_level = logging.INFO
+    repetitions = 50
+    thread_values = [1, 2, 4, 8, 16]
+
+    # Initialize the PardisoKernelBenchmark instance
+    pardiso_benchmark = PardisoKernelBenchmark(
+        engine=engine_path,
+        database_folder=database_folder,
+        timeout=timeout,
+        log_level=log_level
+    )
+
+    # Run the process_matrices method with specified repetitions and threads
+    pardiso_benchmark.process_matrices(repetitions=repetitions, thread_values=thread_values)
+    logger.info("PARDISO Benchmarking completed.")
+
+# Step 2.5: Solve and benchmark matrices using SuperLU
+# SuperLU benchmark function
+def run_superlu(logger):
+    database_folder = "./data/circuit_data"  # Example path; update as needed
+
+    logger.info("Initializing SuperLU benchmark.")
+    superlu_benchmark = SuperluBenchmark(database_folder, timeout=100)
+
+    # Find .mtx files in the database folder
+    superlu_benchmark.find_mtx_files()
+
+    # Run the benchmark and save results
+    superlu_benchmark.run_benchmark()
+    logger.info("SuperLU Benchmarking completed.")
+    
+    
 def main():
-    parser = argparse.ArgumentParser(description="Run matrix generation and benchmarks for KLU and NICSLU.")
+    parser = argparse.ArgumentParser(description="Run matrix generation and benchmarks for KLU, NICSLU, and GLU.")
     parser.add_argument("--log_level", type=str, default="INFO", help="Logging level: DEBUG, INFO, WARNING, ERROR, CRITICAL")
     args = parser.parse_args()
 
@@ -104,6 +161,15 @@ def main():
     
     # Benchmark matrices with NICSLU
     run_nicslu(logger)
+
+    # # Benchmark matrices with GLU
+    # run_glu(logger)  # Disabled if running directly
+
+    # Benchmark matrices with PARDISO
+    run_pardiso(logger)
+    
+    # Benchmark matrices with SuperLU
+    run_superlu(logger)
 
 if __name__ == "__main__":
     main()
