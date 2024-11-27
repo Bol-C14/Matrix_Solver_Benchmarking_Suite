@@ -20,3 +20,4 @@ myenv/bin/python
 myenv/bin/python3
 myenv/bin/python3.10
 correlation_heatmap.png
+lib/sparse.zip

@@ -1,7 +1,7 @@
 # lib/random_circuit_generator/__init__.py
 
 # Import necessary modules to make them accessible at the package level
-from .GraphGenerator import (
+from .extra_graph_generator import (
     generate_circuit,
     visualize_graph,
     print_degrees_and_connections,

@@ -44,7 +44,7 @@ CIRCUIT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 # Step 1: Generate matrices and save to `data/circuit_data`
 def generate_matrices(logger):
     node_iterations = 1  # Number of times to iterate for each node count
-    node_numbers = np.concatenate((np.arange(5, 100, 5), np.arange(100, 1000, 50)))
+    node_numbers = np.concatenate((np.arange(5, 100, 5), np.arange(10, 200, 50)))
 
     logger.info(f"Generating matrices in {CIRCUIT_OUTPUT_DIR}")
     run_circuit_generation(node_iterations, node_numbers, output_directory=CIRCUIT_OUTPUT_DIR, verbose=False)
@@ -181,11 +181,11 @@ def main():
     # # Benchmark matrices with GLU
     # run_glu(logger)  # Disabled if running directly
 
-    # Benchmark matrices with PARDISO
-    run_pardiso(logger)
+    # # Benchmark matrices with PARDISO
+    # run_pardiso(logger)
     
-    # Benchmark matrices with SuperLU
-    run_superlu(logger)
+    # # Benchmark matrices with SuperLU
+    # run_superlu(logger)
 
 if __name__ == "__main__":
     main()
