@@ -130,38 +130,27 @@ def generate_circuit(num_nodes, connection_method='random', extra_connections=0,
 
     return G
 
-def visualize_graph(G):
+def visualize_graph(G, filename):
     plt.figure(figsize=(10, 8))
 
     # Layout
     pos = nx.spring_layout(G)
 
-    # Get unique modules and assign colors
-    modules = set(node.chosen_module for node in G.nodes())
-    color_map = {module: plt.cm.jet(i / len(modules)) for i, module in enumerate(modules)}
-    node_colors = [color_map.get(node.chosen_module, 0.25) for node in G.nodes()]
-
     # Nodes
-    nx.draw_networkx_nodes(G, pos, node_size=400, alpha=0.85, node_color=node_colors)
+    nx.draw_networkx_nodes(G, pos, node_size=400, alpha=0.85)
 
     # Edges
     nx.draw_networkx_edges(G, pos, width=2, edge_color="gray")
 
     # Labels
     labels = {node: node.id for node in G.nodes}
-    label_pos = {k: [v[0], v[1] + 0.05] for k, v in pos.items()}
-    nx.draw_networkx_labels(G, label_pos, labels, font_size=10)
-
-    # Legend
-    for module, color in color_map.items():
-        plt.plot([], [], 'o', color=color, label=module)
-    plt.legend()
+    nx.draw_networkx_labels(G, pos, labels, font_size=10)
 
     plt.title("Node Graph")
     plt.axis("off")
     plt.tight_layout()
-    plt.savefig("node_graph.png", dpi=600)
-    plt.show()
+    plt.savefig(filename, dpi=600)
+    plt.close()
 
 def print_degrees_and_connections(G):
     for node in G.nodes:
@@ -247,30 +236,38 @@ def building_modules(G, num_nodes):
         b_matrix.extend(b)
 
 def write_to_mtx(a_matrix, b_matrix, file_path, num_rows):
+
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
+    # Sort the list of dictionaries by y and then by x
     a_matrix = sorted(a_matrix, key=lambda coord: (coord['y'], coord['x']))
 
+    # Iterate over the dictionaries in the list
     result_dict = defaultdict(float)
     for d in a_matrix:
+        # Use tuple (x, y) as a key for the dictionary and add the value to the current sum
         result_dict[(d['x'], d['y'])] += d['value']
     a_matrix = [{"x": x, "y": y, "value": v} for (x, y), v in result_dict.items()]
     Total_nonzero_elements = len(a_matrix)
 
     with open(file_path, 'w') as file:
+        # Write the Matrix Market header
         file.write("%%MatrixMarket matrix coordinate real general\n")
-        file.write(f"{num_rows} {num_rows} {Total_nonzero_elements}\n")
+        file.write(f"{num_rows + 1} {num_rows + 1} {Total_nonzero_elements}\n")
 
+        # Write the coordinate values
         for i in a_matrix:
             x = i['x']
             y = i['y']
             value = i['value']
             file.write(f"{x} {y} {value}\n")
 
+    # print the sparse image of a_matrix
     x = [item['x'] for item in a_matrix]
     y = [item['y'] for item in a_matrix]
     data = [item['value'] for item in a_matrix]
 
+    # Create sparse matrix
     sparse_matrix = coo_matrix((data, (x, y)))
     plt.spy(sparse_matrix, markersize=1)
     # plt.savefig('sparse_matrix.png', dpi=600)
@@ -299,8 +296,16 @@ def run_circuit_generation(nodeofiterations, nodenumbers, connection_method='ran
 
                 building_modules(Graph, numberOfRows)
 
-                filename = os.path.join(output_directory, f'random_circuit_{nodenumber}_{i + 1}.mtx')
-                write_to_mtx(a_matrix, b_matrix, filename, numberOfRows)
+                # Generate filenames
+                base_filename = os.path.join(output_directory, f'random_circuit_{nodenumber}_{i + 1}')
+                mtx_filename = f'{base_filename}.mtx'
+                png_filename = f'{base_filename}.png'
+
+                # Write the .mtx file
+                write_to_mtx(a_matrix, b_matrix, mtx_filename, numberOfRows)
+
+                # Generate and save the graph visualization
+                visualize_graph(Graph, png_filename)
 
                 numberOfRows = 0
                 a_matrix.clear()
