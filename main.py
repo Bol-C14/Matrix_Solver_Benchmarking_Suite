@@ -172,20 +172,20 @@ def main():
     # Generate matrices
     generate_matrices(logger)
 
-    # Benchmark matrices with KLU
-    run_klu(logger)
+    # # Benchmark matrices with KLU
+    # run_klu(logger)
     
-    # Benchmark matrices with NICSLU
-    run_nicslu(logger)
+    # # Benchmark matrices with NICSLU
+    # run_nicslu(logger)
 
-    # Benchmark matrices with GLU
-    # run_glu(logger)  # Disabled if running directly
+    # # Benchmark matrices with GLU
+    # # run_glu(logger)  # Disabled if running directly
 
-    # Benchmark matrices with PARDISO
-    run_pardiso(logger)
+    # # Benchmark matrices with PARDISO
+    # run_pardiso(logger)
     
-    # Benchmark matrices with SuperLU
-    run_superlu(logger)
+    # # Benchmark matrices with SuperLU
+    # run_superlu(logger)
 
 if __name__ == "__main__":
     main()

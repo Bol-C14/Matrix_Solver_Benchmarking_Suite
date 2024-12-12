@@ -68,13 +68,13 @@ class PardisoKernelBenchmark:
         Processes all matrix files in the database, running benchmarks with various threads.
         """
         loc = 0
-        mtxs = [filename[:-4] for filename in os.listdir(self.database_folder) if filename.endswith('.mtx') and filename.startswith('random_circuit')]
+        mtxs = [filename[:-4] for filename in os.listdir(self.database_folder)]
 
         if not mtxs:
             logging.warning("No .mtx files found in the directory!")
             return
 
-        mtxs = sorted(mtxs, key=self.custom_sort)
+        mtxs = sorted(mtxs)
         reps = np.ones(len(mtxs), dtype=int) * repetitions
 
         logging.info(f"Starting PARDISO benchmarks on {len(mtxs)} matrices")

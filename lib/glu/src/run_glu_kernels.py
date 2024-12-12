@@ -95,13 +95,13 @@ class GluKernelBenchmark:
         Process all matrix files in the database folder, run benchmarks, and save results.
         """
         loc = 0
-        mtxs = [filename[:-4] for filename in os.listdir(self.database_folder) if filename.endswith('.mtx') and filename.startswith('random_circuit')]
+        mtxs = [filename[:-4] for filename in os.listdir(self.database_folder) if filename.endswith('.mtx')]
 
         if not mtxs:
             logging.warning("No .mtx files found in the directory!")
             return
 
-        mtxs = sorted(mtxs, key=self.custom_sort)
+        mtxs = sorted(mtxs)
         reps = np.ones(len(mtxs), dtype=int) * 1
 
         logging.info(f"Starting benchmark for {len(mtxs)} matrices")
@@ -151,7 +151,7 @@ class GluKernelBenchmark:
         return int(parts[2]), int(parts[3])
 
 # Wrapper function for external usage
-def run_benchmark(engine='./glu_kernel', database_folder="/home/gushu/work/MLtask/ML_Circuit_Matrix_Analysis/data/circuit_data", timeout=100, log_level=logging.INFO):
+def run_benchmark(engine='./glu_kernel', database_folder="/home/gushu/work/MLtask/ML_Circuit_Matrix_Analysis/data/ss_organized_data", timeout=100, log_level=logging.INFO):
     """
     Run the GLU kernel benchmark with adjustable parameters.
     """

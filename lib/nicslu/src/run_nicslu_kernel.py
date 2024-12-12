@@ -9,7 +9,7 @@ from tqdm import tqdm
 import argparse
 
 class NICSLUTester:
-    def __init__(self, database_folder, engine_path='./nicslu_kernel.o', timeout=100):
+    def __init__(self, database_folder, engine_path='./lib/nicslu/src/nicslu_kernel.o', timeout=100):
         # Initialize paths and constants
         self.database_folder = Path(database_folder)
         self.engine = engine_path
@@ -25,43 +25,70 @@ class NICSLUTester:
                             ])
         self.logger = logging.getLogger(__name__)
 
-    def run_single(self, nrhs, filename, bmatrix, reps, threads=1):
-        command = [self.engine, str(nrhs), filename, bmatrix, str(reps), str(threads)]
+    def run_single(self, nrhs, filename, reps, threads=1, bmatrix=None):
+        command = [self.engine, str(nrhs), filename]
+        if bmatrix:
+            command.append(str(bmatrix))
+        command.extend([str(reps), str(threads)])
         self.logger.debug(f"Running command: {' '.join(command)}")
 
         try:
             p = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=self.timeout)
 
             if p.returncode == 0:
-                out_lines = (p.stdout).decode('utf-8').split('\n')
-                self.logger.debug(f"Command output: {out_lines}")
-                time1 = float(out_lines[-3].split(':')[1])
-                time2 = float(out_lines[-2].split(':')[1])
+                out_str = p.stdout.decode('utf-8')
+                out_lines = out_str.strip().split('\n')
+                self.logger.debug(f"Command output:\n{out_str}")
+
+                if len(out_lines) < 3:
+                    self.logger.error(f"Unexpected output format from NICSLU executable for file {filename}.")
+                    self.logger.error(f"Output received:\n{out_str}")
+                    time1, time2 = -3, -3  # Custom error codes
+                else:
+                    try:
+                        time1 = float(out_lines[-3].split(':')[1].strip())
+                        time2 = float(out_lines[-2].split(':')[1].strip())
+                    except (IndexError, ValueError) as e:
+                        self.logger.error(f"Error parsing output for file {filename}: {e}")
+                        self.logger.error(f"Output received:\n{out_str}")
+                        time1, time2 = -4, -4  # Custom error codes
             else:
-                self.logger.warning(f"Error running command: {p.stderr.decode('utf-8')}")
+                error_output = p.stderr.decode('utf-8')
+                self.logger.warning(f"Error running command: {error_output}")
                 time1, time2 = -1, -1
 
         except subprocess.TimeoutExpired:
-            self.logger.warning(f"Command timed out: {' '.join(command)}")
+            command_str = ' '.join(command)
+            self.logger.warning(f"Command timed out: {command_str}")
             time1, time2 = -2, -2
+
+        except Exception as e:
+            self.logger.error(f"Unexpected error running command {' '.join(command)}: {e}")
+            time1, time2 = -5, -5  # Custom error codes
 
         return time1, time2
 
     def custom_sort(self, matrix_name):
-        parts = matrix_name.split('_')
-        return int(parts[2]), int(parts[3])
+        # Sort alphabetically
+        return matrix_name.lower()
 
     def process_matrices(self, reps_value=100, thread_values=None):
+        """
+        Process all .mtx files in the database folder using specified thread values.
+        """
         if thread_values is None:
             thread_values = [1, 4, 8, 12, 24, 32]
 
         loc = 0
-        mtxs = [f[:-4] for f in os.listdir(self.database_folder) if f.endswith('.mtx') and f.startswith('random_circuit')]
+
+        # Include all .mtx files in the directory
+        mtxs = [f[:-4] for f in os.listdir(self.database_folder) if f.endswith('.mtx')]
 
         if not mtxs:
             self.logger.warning("No .mtx files found in the directory!")
+            return
 
-        mtxs.sort(key=self.custom_sort)
+        mtxs.sort(key=self.custom_sort)  # Sort the files for consistent processing
         reps = np.ones(len(mtxs), dtype=int) * reps_value
 
         self.logger.info("Starting matrix processing...")
@@ -69,17 +96,25 @@ class NICSLUTester:
         for threads in thread_values:
             for i in tqdm(range(len(mtxs)), desc=f"Processing Matrices with {threads} threads"):
                 filepath = self.database_folder / f"{mtxs[i]}.mtx"
-                bmatrix = self.database_folder / mtxs[i] / 'vecb.mtx'
+                bmatrix = '/home/gushu/work/MLtask/ML_Circuit_Matrix_Analysis/data/vecb.mtx'
 
                 try:
                     self.logger.debug(f"Reading matrix from {filepath}")
-                    matrix = sio.mmread(filepath)
+                    
+                    # Read the .mtx file
+                    if not filepath.exists():
+                        raise FileNotFoundError(f"Matrix file not found: {filepath}")
+                    
+                    matrix = sio.mmread(filepath)  # Assumes scipy.io.mmread is used for reading
                     nnz = matrix.nnz
                     num_rows, num_cols = matrix.shape
 
                     self.logger.debug(f"Running analysis on {filepath} with {nnz} non-zero elements and {num_rows} rows")
-                    t1, t2 = self.run_single(1, str(filepath), str(bmatrix), reps[i], threads=threads)
 
+                    # Run the analysis
+                    t1, t2 = self.run_single(1, str(filepath), reps[i], threads=threads, bmatrix=bmatrix)
+
+                    # Save results
                     self.df.loc[loc] = [loc, mtxs[i], 'NICSLU', threads, nnz, num_rows, t1, t2]
                     self.logger.debug(f"Finished processing {filepath}: Analyze time = {t1}, Factorization time = {t2}")
 
@@ -102,11 +137,12 @@ class NICSLUTester:
         self.process_matrices(reps_value, thread_values)
         self.logger.info("NICSLU Benchmark completed.")
 
+
 # Wrapper function with argparse for command-line arguments
 def main():
     parser = argparse.ArgumentParser(description="Run NICSLU tests on matrix files.")
-    parser.add_argument("--database_folder", type=str, default="/mnt/c/Work/transient-simulation/Random_Circuit_Generator/random_circuit_matrixs", help="Path to the database folder with matrix files")
-    parser.add_argument("--engine_path", type=str, default="./nicslu_kernel.o", help="Path to the NICSLU engine executable")
+    parser.add_argument("--database_folder", type=str, default="./data/ss_organized_data", help="Path to the database folder with matrix files")
+    parser.add_argument("--engine_path", type=str, default="./lib/nicslu/src/nicslu_kernel.o", help="Path to the NICSLU engine executable")
     parser.add_argument("--timeout", type=int, default=100, help="Timeout in seconds for each command")
     parser.add_argument("--reps_value", type=int, default=100, help="Number of repetitions for each matrix")
     parser.add_argument("--thread_values", nargs='+', type=int, default=[1, 4, 8, 12, 24, 32], help="List of thread values to use")
@@ -125,6 +161,7 @@ def main():
     )
 
     tester.run(reps_value=args.reps_value, thread_values=args.thread_values)
+
 
 if __name__ == "__main__":
     main()

@@ -269,9 +269,11 @@ def write_to_mtx(a_matrix, b_matrix, file_path, num_rows):
 
     # Create sparse matrix
     sparse_matrix = coo_matrix((data, (x, y)))
+    plt.figure()
     plt.spy(sparse_matrix, markersize=1)
-    # plt.savefig('sparse_matrix.png', dpi=600)
-    # plt.show()
+    matrix_png_filename = file_path.replace('.mtx', '_matrix.png')
+    plt.savefig(matrix_png_filename, dpi=600)
+    plt.close()
 
 def run_circuit_generation(nodeofiterations, nodenumbers, connection_method='random', output_directory="random_circuit_matrixs", verbose=False):
     os.makedirs(output_directory, exist_ok=True)

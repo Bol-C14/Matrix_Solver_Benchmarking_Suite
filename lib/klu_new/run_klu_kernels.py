@@ -48,7 +48,7 @@ class KluBenchmark:
         ])
         self.mtxs = []
 
-    def run_single(self, engine, nrhs, filename, bmatrix, reps):
+    def run_single(self, engine, nrhs, filename, reps, bmatrix=None):
         """
         Run a single benchmark command for KLU on the given matrix file.
         """
@@ -79,24 +79,31 @@ class KluBenchmark:
         Find all matrix (.mtx) files in the database folder.
         """
         if not self.database_folder.exists():
-            logging.error(f"Directory {self.database_folder} does not exist!")
+            logger.error(f"Directory {self.database_folder} does not exist!")
             raise FileNotFoundError(f"Directory {self.database_folder} does not exist!")
 
-        logging.info(f"Looking for .mtx files in {self.database_folder}")
+        logger.info(f"Looking for .mtx files in {self.database_folder}")
+        # Iterate through files in the directory
         for filename in os.listdir(self.database_folder):
-            if filename.endswith('.mtx') and filename.startswith('random_circuit'):
-                self.mtxs.append(filename[:-4])
+            if filename.endswith('.mtx'):  # Match all .mtx files
+                # Ensure it's a file, not a directory
+                file_path = self.database_folder / filename
+                if file_path.is_file():
+                    self.mtxs.append(filename[:-4])  # Add the filename without the extension
+                else:
+                    logger.debug(f"Skipping directory named like a .mtx file: {file_path}")
 
         if not self.mtxs:
-            logging.warning("No .mtx files found in the directory!")
-        logging.debug(f"Found .mtx files: {self.mtxs}")
+            logger.warning("No .mtx files found in the directory!")
+        else:
+            logger.info(f"Found .mtx files: {self.mtxs}")
 
     def custom_sort(self, matrix_name):
         """
         Custom sorting function for matrix filenames.
         """
-        parts = matrix_name.split('_')
-        return int(parts[2]), int(parts[3])
+        # Sort alphabetically
+        return matrix_name.lower()
 
     def run_benchmark(self):
         """
@@ -105,39 +112,44 @@ class KluBenchmark:
         self.mtxs = sorted(self.mtxs, key=self.custom_sort)
         reps = np.ones(len(self.mtxs), dtype=int) * 100
 
-        logging.info(f"Starting benchmark on {len(self.mtxs)} matrices")
+        logger.info(f"Starting benchmark on {len(self.mtxs)} matrices")
 
         for i in tqdm(range(len(self.mtxs)), desc="KLU - Processing Matrices"):
-            filepath = str(self.database_folder / (self.mtxs[i] + '.mtx'))
-            bmatrix = str(self.database_folder / self.mtxs[i] / 'vecb.mtx')
+            filepath = self.database_folder / f"{self.mtxs[i]}.mtx"
+            bmatrix = '/home/gushu/work/MLtask/ML_Circuit_Matrix_Analysis/data/vecb.mtx'
 
             try:
-                logging.debug(f"Reading matrix from {filepath}")
+                logger.debug(f"Reading matrix from {filepath}")
+                if not filepath.exists():
+                    raise FileNotFoundError(f"Matrix file not found: {filepath}")
+
                 matrix = sio.mmread(filepath)
                 nnz = matrix.nnz
                 num_rows, _ = matrix.shape
 
-                logging.debug(f"Running analysis on {filepath} with {nnz} non-zero elements and {num_rows} rows")
-                t1, t2 = self.run_single(self.engine, 1, filepath, bmatrix, reps[i])
+                logger.debug(f"Running analysis on {filepath} with {nnz} non-zero elements and {num_rows} rows")
+                t1, t2 = self.run_single(self.engine, 1, str(filepath), reps[i], bmatrix)
 
                 # Log completion details at the DEBUG level
-                logging.debug(f"Completed {self.mtxs[i]}: Analyze = {t1}, Factorization = {t2}")
+                logger.debug(f"Completed {self.mtxs[i]}: Analyze = {t1}, Factorization = {t2}")
                 self.df.loc[i] = [i, self.mtxs[i], 'KLU', 1, nnz, num_rows, t1, t2]
 
             except Exception as e:
-                logging.error(f"Error processing matrix {filepath}: {str(e)}")
+                logger.error(f"Error processing matrix {filepath}: {str(e)}")
                 continue
 
-        logging.info("Benchmark completed for all matrices")
-        logging.debug(f"Final DataFrame: \n{self.df}")
+        logger.info("Benchmark completed for all matrices")
+        logger.debug(f"Final DataFrame: \n{self.df}")
         self.df.to_csv('results_klu_kernel.csv', index=False)
-        logging.info('Results saved to results_klu_kernel.csv')
+        logger.info('Results saved to results_klu_kernel.csv')
         print('done!')
+
 
 # Example usage of the class
 if __name__ == "__main__":
-    engine = './src/klu_kernel.o'
-    database_folder = "/mnt/c/Work/transient-simulation/Random_Circuit_Generator/random_circuit_matrixs"
+    # Update the engine path and database folder as per your setup
+    engine = './lib/klu_new/src/klu_kernel.o'
+    database_folder = './data/ss_organized_data'
 
     klu_benchmark = KluBenchmark(engine, database_folder)
     klu_benchmark.find_mtx_files()
