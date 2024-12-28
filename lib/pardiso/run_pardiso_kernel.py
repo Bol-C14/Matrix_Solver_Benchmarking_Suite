@@ -17,7 +17,7 @@ class PardisoKernelBenchmark:
         self.database_folder = Path(database_folder)
         self.timeout = timeout
         self.df = pd.DataFrame(columns=["index", "mtx", "algorithmname", "threads", "nnz", "rows", "Analyze", "Factorization"])
-        
+
         # Set up logging based on log level
         self.setup_logging(log_level)
 
@@ -68,7 +68,7 @@ class PardisoKernelBenchmark:
         Processes all matrix files in the database, running benchmarks with various threads.
         """
         loc = 0
-        mtxs = [filename[:-4] for filename in os.listdir(self.database_folder)]
+        mtxs = [filename[:-4] for filename in os.listdir(self.database_folder) if filename.endswith('.mtx')]
 
         if not mtxs:
             logging.warning("No .mtx files found in the directory!")
@@ -86,10 +86,16 @@ class PardisoKernelBenchmark:
 
                 try:
                     logging.debug(f"Reading matrix from {filepath}")
-                    matrix = sio.mmread(filepath)
-                    nnz = matrix.nnz
-                    num_rows, _ = matrix.shape
-                    logging.debug(f"Processing {mtxs[i]}: {nnz} non-zero elements, {num_rows} rows")
+
+                    # Attempt to read the matrix and log errors if encountered
+                    try:
+                        matrix = sio.mmread(filepath)
+                        nnz = matrix.nnz
+                        num_rows, _ = matrix.shape
+                        logging.debug(f"Successfully read {mtxs[i]}: {nnz} non-zero elements, {num_rows} rows")
+                    except Exception as e:
+                        logging.error(f"Error reading matrix {filepath}: {str(e)}")
+                        continue
 
                     t1, t2 = self.run_single(1, filepath, bmatrix, reps[i], threads=thread_count)
 

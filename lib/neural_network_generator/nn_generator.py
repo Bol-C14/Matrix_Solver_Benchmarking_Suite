@@ -14,21 +14,20 @@ def load_and_preprocess_matrices(directory, max_size=128):
     """
     matrices = []
     for filename in os.listdir(directory):
-        if filename.endswith('.mtx.gz'):
+        if filename.endswith('.mtx'):
             print(f"Processing {filename}")
-            with gzip.open(os.path.join(directory, filename), 'rb') as f:
-                try:
-                    matrix = scipy.io.mmread(f).tocsr()
-                    rows, cols = matrix.shape
-                    if rows > max_size or cols > max_size:
-                        continue
-                    dense_matrix = matrix.toarray()
-                    padded_matrix = np.zeros((max_size, max_size))
-                    padded_matrix[:rows, :cols] = dense_matrix
-                    binarized_matrix = (padded_matrix != 0).astype(np.float32)
-                    matrices.append(binarized_matrix)
-                except Exception as e:
-                    print(f"Failed to process {filename}: {e}")
+            try:
+                matrix = scipy.io.mmread(os.path.join(directory, filename)).tocsr()
+                rows, cols = matrix.shape
+                if rows > max_size or cols > max_size:
+                    continue
+                dense_matrix = matrix.toarray()
+                padded_matrix = np.zeros((max_size, max_size))
+                padded_matrix[:rows, :cols] = dense_matrix
+                binarized_matrix = (padded_matrix != 0).astype(np.float32)
+                matrices.append(binarized_matrix)
+            except Exception as e:
+                print(f"Failed to process {filename}: {e}")
     return np.array(matrices)
 
 
@@ -128,6 +127,8 @@ def generate_new_matrices(num_samples):
 new_matrices = generate_new_matrices(5)
 
 for i, matrix in enumerate(new_matrices):
+    print(matrix.shape)
+    print(matrix)
     plt.imshow(matrix.squeeze(), cmap='gray')
     plt.title(f'Generated Matrix {i+1}')
     plt.axis('off')

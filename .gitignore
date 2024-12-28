@@ -21,3 +21,6 @@ myenv/bin/python3
 myenv/bin/python3.10
 correlation_heatmap.png
 lib/sparse.zip
+data/circuit_data/
+lib/neural_network_generator/__pycache__/pure_random_generator.cpython-310.pyc
+.vscode/c_cpp_properties.json

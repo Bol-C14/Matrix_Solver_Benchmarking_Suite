@@ -36,7 +36,7 @@ logger.addHandler(console_handler)
 
 
 class KluBenchmark:
-    def __init__(self, engine, database_folder, timeout=100):
+    def __init__(self, engine, database_folder, timeout=60):
         """
         Initialize the KluBenchmark class with the engine path, database folder, and timeout.
         """
