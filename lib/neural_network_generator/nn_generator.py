@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 
 
 # --- Step 1: Load and Preprocess Matrices ---
-def load_and_preprocess_matrices(directory, max_size=128):
+def load_and_preprocess_matrices(directory, max_size=512):
     """
     Load sparse circuit matrices, convert to dense, and preprocess for model training.
     """
