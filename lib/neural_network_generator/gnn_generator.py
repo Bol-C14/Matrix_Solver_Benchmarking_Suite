@@ -11,14 +11,13 @@ import matplotlib.pyplot as plt
 BLOCK_SIZE = 128
 STRIDE = 128
 LATENT_DIM = 32
-EPOCHS = 50
+EPOCHS = 10
 BATCH_SIZE = 16
 VAL_SPLIT = 0.2
 DATA_DIRECTORY = 'matrices_sample'
 MAX_MATRICES = 5
-MODEL_PATH = 'saved_vae_model'
 MODEL_PATH_KERAS = 'saved_vae_model.keras'
-MODEL_PATH_SAVEDMODEL = 'saved_vae_model_dir'
+BETA = 1.0  # Weight for KL divergence
 
 # =====================================
 # 0. Handle GPU Configuration
@@ -69,18 +68,22 @@ def data_generator(directory, block_size=128, stride=128, batch_size=16, max_mat
         for i in range(0, len(all_blocks), batch_size):
             batch = all_blocks[i:i+batch_size]
             if len(batch) == batch_size:
-                batch = np.array(batch)[..., np.newaxis]
+                batch = np.array(batch)
+                if batch.ndim == 3:
+                    batch = np.expand_dims(batch, axis=-1)
                 yield batch, batch
             else:
-                continue
+                continue  # Discard incomplete batches
 
 # =====================================
 # 2. Build the Variational Autoencoder
 # =====================================
+
+@tf.keras.utils.register_keras_serializable()
 def sampling(args):
     z_mean, z_log_var = args
-    epsilon = K.random_normal(shape=(K.shape(z_mean)[0], LATENT_DIM))
-    return z_mean + K.exp(0.5 * z_log_var) * epsilon
+    epsilon = tf.random.normal(shape=(tf.shape(z_mean)[0], LATENT_DIM))
+    return z_mean + tf.exp(0.5 * z_log_var) * epsilon
 
 def build_encoder(input_shape):
     encoder_inputs = layers.Input(shape=input_shape)
@@ -117,32 +120,55 @@ decoder = build_decoder(input_shape)
 
 @tf.keras.utils.register_keras_serializable()
 class VAE(models.Model):
-    def __init__(self, encoder, decoder, **kwargs):
+    def __init__(self, encoder, decoder, beta=1.0, **kwargs):
         super(VAE, self).__init__(**kwargs)
         self.encoder = encoder
         self.decoder = decoder
+        self.beta = beta
 
     def call(self, inputs):
         z_mean, z_log_var, z = self.encoder(inputs)
         reconstructed = self.decoder(z)
         return reconstructed
-    
 
-vae = VAE(encoder, decoder)
+    def train_step(self, data):
+        inputs, _ = data
+        with tf.GradientTape() as tape:
+            z_mean, z_log_var, z = self.encoder(inputs)
+            reconstructed = self.decoder(z)
+            # Reconstruction loss
+            reconstruction_loss = tf.reduce_sum(
+                tf.keras.losses.binary_crossentropy(inputs, reconstructed), axis=[1, 2]
+            )
+            # KL Divergence
+            kl_loss = -0.5 * tf.reduce_sum(
+                1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var), axis=1
+            )
+            total_loss = tf.reduce_mean(reconstruction_loss + self.beta * kl_loss)
+        grads = tape.gradient(total_loss, self.trainable_weights)
+        self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
+        return {"loss": total_loss}
 
-def vae_loss(inputs, outputs):
-    reconstruction_loss = tf.keras.losses.binary_crossentropy(
-        K.flatten(inputs), K.flatten(outputs)
-    )
-    reconstruction_loss *= (BLOCK_SIZE * BLOCK_SIZE)
-    z_mean, z_log_var, _ = encoder(inputs)
-    kl_loss = -0.5 * K.sum(
-        1 + z_log_var - K.square(z_mean) - K.exp(z_log_var),
-        axis=-1
-    )
-    return K.mean(reconstruction_loss + kl_loss)
+    def get_config(self):
+        config = super(VAE, self).get_config()
+        config.update({
+            "encoder": tf.keras.utils.serialize_keras_object(self.encoder),
+            "decoder": tf.keras.utils.serialize_keras_object(self.decoder),
+            "beta": self.beta
+        })
+        return config
 
-vae.compile(optimizer='adam', loss=vae_loss)
+    @classmethod
+    def from_config(cls, config):
+        encoder = tf.keras.utils.deserialize_keras_object(config.pop("encoder"))
+        decoder = tf.keras.utils.deserialize_keras_object(config.pop("decoder"))
+        beta = config.pop("beta", 1.0)
+        return cls(encoder=encoder, decoder=decoder, beta=beta, **config)
+
+vae = VAE(encoder, decoder, beta=BETA)
+
+# No external loss function needed since it's handled in train_step
+vae.compile(optimizer='adam')
 
 # =====================================
 # 3. Check for Existing Model
@@ -153,7 +179,13 @@ if os.path.exists(MODEL_PATH_KERAS):
     use_existing = input("Do you want to use the existing model? (yes/no): ").strip().lower()
     if use_existing == 'yes':
         print("Loading existing model in Keras format...")
-        vae = tf.keras.models.load_model(MODEL_PATH_KERAS, custom_objects={'vae_loss': vae_loss})
+        vae = tf.keras.models.load_model(
+            MODEL_PATH_KERAS, 
+            custom_objects={
+                "VAE": VAE, 
+                "sampling": sampling  # Register the 'sampling' function
+            }
+        )
     else:
         print("Proceeding to train a new model...")
 else:
@@ -177,96 +209,40 @@ if not os.path.exists(MODEL_PATH_KERAS) or use_existing == 'no':
             tf.TensorSpec(shape=(BATCH_SIZE, BLOCK_SIZE, BLOCK_SIZE, 1), dtype=tf.float32),
         )
     ).prefetch(tf.data.AUTOTUNE)
-    history = vae.fit(dataset, epochs=EPOCHS, steps_per_epoch=1000)
+
+    # Estimate steps per epoch
+    mtx_files = [f for f in os.listdir(DATA_DIRECTORY) if f.endswith('.mtx')]
+    if MAX_MATRICES is not None:
+        mtx_files = mtx_files[:MAX_MATRICES]
+    total_blocks = 0
+    for filename in mtx_files:
+        path = os.path.join(DATA_DIRECTORY, filename)
+        try:
+            matrix = scipy.io.mmread(path).tocsr()
+            dense_mat = matrix.toarray()
+            binarized = (dense_mat != 0).astype(np.float32)
+            blocks = extract_subblocks(binarized, block_size=BLOCK_SIZE, stride=STRIDE)
+            total_blocks += len(blocks)
+        except Exception as e:
+            print(f"Failed to process {filename}: {e}")
+
+    steps_per_epoch = total_blocks // BATCH_SIZE
+    print(f"Total blocks: {total_blocks}, Steps per epoch: {steps_per_epoch}")
+
+    history = vae.fit(
+        dataset,
+        epochs=EPOCHS,
+        steps_per_epoch=steps_per_epoch,
+    )
 
     print(f"Saving model to '{MODEL_PATH_KERAS}' in Keras format...")
     vae.save(MODEL_PATH_KERAS)
-    print(f"Saving model to '{MODEL_PATH_SAVEDMODEL}' in SavedModel format...")
-    # Use the low-level SavedModel API for directory-based saving in TF
-    tf.saved_model.save(vae, MODEL_PATH_SAVEDMODEL)
 
 # =====================================
-# 5. Generate New Blocks / Large Matrix
+# Verify Model Outputs
 # =====================================
-def generate_new_blocks(num_samples):
-    z_samples = np.random.normal(size=(num_samples, LATENT_DIM))
-    generated_blocks = decoder.predict(z_samples)
-    return generated_blocks
-
-def stitch_blocks_to_large_matrix(blocks, num_rows, num_cols, block_size=128):
-    large_matrix = np.zeros((num_rows * block_size, num_cols * block_size))
-    idx = 0
-    for r in range(num_rows):
-        for c in range(num_cols):
-            if idx >= len(blocks):
-                break
-            block = blocks[idx].squeeze()
-            row_start = r * block_size
-            col_start = c * block_size
-            large_matrix[row_start:row_start+block_size, col_start:col_start+block_size] = block
-            idx += 1
-    return large_matrix
-
-num_blocks = 9
-generated_blocks = generate_new_blocks(num_blocks)
-stitched_matrix = stitch_blocks_to_large_matrix(generated_blocks, 3, 3, BLOCK_SIZE)
-
-plt.figure(figsize=(6,6))
-plt.imshow(stitched_matrix, cmap='gray')
-plt.title('Stitched Large Matrix (3x3 blocks)')
-plt.axis('off')
-plt.show()
-
-# =====================================
-# 6. Evaluate Sparsity
-# =====================================
-def calculate_sparsity(matrices):
-    if len(matrices.shape) == 2:
-        total_elements = matrices.size
-        non_zero_elements = np.count_nonzero(matrices)
-        sparsity = 1 - (non_zero_elements / total_elements)
-        return sparsity
-    elif len(matrices.shape) == 3:
-        total_elements = matrices.size
-        non_zero_elements = np.count_nonzero(matrices)
-        return 1 - (non_zero_elements / total_elements)
-    elif len(matrices.shape) == 4:
-        total_elements = np.prod(matrices.shape[1:])
-        non_zero_elements = np.count_nonzero(matrices)
-        return 1 - (non_zero_elements / total_elements)
-    else:
-        raise ValueError("Matrices must be 2D, 3D, or 4D with channel dimension.")
-
-generated_sparsity = calculate_sparsity(generated_blocks)
-print(f"Generated Block Sparsity: {generated_sparsity:.4f}")
-
-# Example: fetch a single batch for analysis
-try:
-    gen = data_generator(DATA_DIRECTORY, block_size=BLOCK_SIZE, stride=STRIDE, batch_size=BATCH_SIZE, max_matrices=MAX_MATRICES)
-    sample_batch, _ = next(gen)
-    original_sparsity = calculate_sparsity(sample_batch)
-    print(f"Original Sub-Block Sparsity: {original_sparsity:.4f}")
-except StopIteration:
-    print("No data available to calculate original sparsity.")
-
-def print_matrix(matrix):
-    binary_matrix = (matrix != 0).astype(int)
-    for row in binary_matrix:
-        print(" ".join(map(str, row)))
-
-def visualize_matrix(matrix, title="Generated Matrix"):
-    binary_matrix = (matrix != 0).astype(int)
-    plt.figure(figsize=(6, 6))
-    plt.imshow(binary_matrix, cmap='gray', interpolation='nearest')
-    plt.title(title)
-    plt.axis('off')
-    plt.show()
-
-num_blocks = 9
-generated_blocks = generate_new_blocks(num_blocks)
-stitched_matrix = stitch_blocks_to_large_matrix(generated_blocks, 3, 3, BLOCK_SIZE)
-
-print("Generated Matrix:")
-print_matrix(stitched_matrix)
-print(stitched_matrix.shape)
-visualize_matrix(stitched_matrix, title="Generated Matrix Visualization")
+gen = data_generator(DATA_DIRECTORY, block_size=BLOCK_SIZE, stride=STRIDE, batch_size=BATCH_SIZE, max_matrices=MAX_MATRICES)
+sample_batch, _ = next(gen)
+print(f"Sample Batch Shape: {sample_batch.shape}")
+sample_output = vae(sample_batch)
+print(f"Model Output Shape: {sample_output.shape}")
