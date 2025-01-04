@@ -181,8 +181,8 @@ def run_superlu(logger, database_folder):
 
 
 def run_random_circuit_generation(logger):
-    node_iterations = 1  # Number of times to iterate for each node count
-    node_numbers = np.concatenate((np.arange(5, 100, 5), np.arange(20, 1000, 80)))
+    node_iterations = 3  # Number of times to iterate for each node count
+    node_numbers = np.concatenate((np.arange(5, 100, 5), np.arange(20, 2000, 80)))
 
     logger.info(f"Generating matrices in {CIRCUIT_OUTPUT_DIR}")
     run_circuit_generation(node_iterations, node_numbers, output_directory=CIRCUIT_OUTPUT_DIR, verbose=False)
