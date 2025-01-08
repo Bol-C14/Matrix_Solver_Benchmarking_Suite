@@ -25,3 +25,4 @@ data/circuit_data/
 lib/neural_network_generator/__pycache__/pure_random_generator.cpython-310.pyc
 .vscode/c_cpp_properties.json
 utils/__pycache__/suitesparse_handler.cpython-310.pyc
+/utils/feature_extraction/data
