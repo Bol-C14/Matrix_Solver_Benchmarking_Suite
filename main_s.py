@@ -45,7 +45,7 @@ def setup_logging(log_level=logging.INFO):
     console_handler.setLevel(log_level)
     console_format = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
     console_handler.setFormatter(console_format)
-    
+     
     # File handler for DEBUG logs
     debug_handler = logging.FileHandler('debug.log')
     debug_handler.setLevel(logging.DEBUG)
@@ -185,7 +185,7 @@ def run_random_circuit_generation(logger):
     node_numbers = np.concatenate((np.arange(5, 100, 5), np.arange(20, 2000, 80)))
 
     logger.info(f"Generating matrices in {CIRCUIT_OUTPUT_DIR}")
-    run_circuit_generation(node_iterations, node_numbers, output_directory=CIRCUIT_OUTPUT_DIR, verbose=False)
+    run_circuit_generation(node_iterations, node_numbers, output_directory=CIRCUIT_OUTPUT_DIR, verbose=False, connection_method = "small_world")
     logger.info("Matrix generation completed.")
     
     benchmark_database_folder = CIRCUIT_OUTPUT_DIR
