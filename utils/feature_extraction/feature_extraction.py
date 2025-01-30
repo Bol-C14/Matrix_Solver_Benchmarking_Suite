@@ -19,8 +19,8 @@ logging.basicConfig(level=logging.INFO,
                     ])
 
 # Input and output paths
-databaseFolder = Path("/home/gushu/work/MLtask/ML_Circuit_Matrix_Analysis/data/generated_matrices")  # Path to the folder containing the .mtx files
-outputFolder = Path("./output_generated_matrices")  # Output folder for the CSV file
+databaseFolder = Path("/mnt/c/Work/ML_Circuit_Matrix_Analysis/utils/feature_extraction/data/circuit_small_world/data/circuit_data")  # Path to the folder containing the .mtx files
+outputFolder = Path("./output_features")  # Output folder for the CSV file
 outputFolder.mkdir(parents=True, exist_ok=True)
 
 # Initialize the DataFrame with additional columns
