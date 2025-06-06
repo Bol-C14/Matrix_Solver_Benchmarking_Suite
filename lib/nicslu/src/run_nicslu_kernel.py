@@ -9,11 +9,12 @@ from tqdm import tqdm
 import argparse
 
 class NICSLUTester:
-    def __init__(self, database_folder, engine_path='./lib/nicslu/src/nicslu_kernel.o', timeout=100):
+    def __init__(self, database_folder, engine_path='./lib/nicslu/src/nicslu_kernel.o', timeout=100, output_dir="."):
         # Initialize paths and constants
         self.database_folder = Path(database_folder)
         self.engine = engine_path
         self.timeout = timeout
+        self.output_dir = Path(output_dir)
         self.df = pd.DataFrame(columns=["index", "mtx", "algorithmname", "threads", "nnz", "rows", "Analyze", "Factorization"])
         
         # Set up logging
@@ -129,8 +130,10 @@ class NICSLUTester:
 
     def save_results(self, filename='results_nicslu_kernel.csv'):
         self.logger.info(f"Saving results to {filename}")
-        self.df.to_csv(filename, index=False)
-        self.logger.info("Results saved.")
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        out_file = self.output_dir / filename
+        self.df.to_csv(out_file, index=False)
+        self.logger.info(f"Results saved to {out_file}.")
 
     def run(self, reps_value=100, thread_values=None):
         self.logger.info("Starting the NICSLU benchmark...")
@@ -147,6 +150,7 @@ def main():
     parser.add_argument("--reps_value", type=int, default=100, help="Number of repetitions for each matrix")
     parser.add_argument("--thread_values", nargs='+', type=int, default=[1, 4, 8, 12, 24, 32], help="List of thread values to use")
     parser.add_argument("--log_level", type=str, default="INFO", help="Logging level: DEBUG, INFO, WARNING, ERROR, CRITICAL")
+    parser.add_argument("--output_dir", type=str, default="./data/results/nicslu", help="Directory to store result CSV")
 
     args = parser.parse_args()
 
@@ -157,7 +161,8 @@ def main():
     tester = NICSLUTester(
         database_folder=args.database_folder,
         engine_path=args.engine_path,
-        timeout=args.timeout
+        timeout=args.timeout,
+        output_dir=args.output_dir
     )
 
     tester.run(reps_value=args.reps_value, thread_values=args.thread_values)

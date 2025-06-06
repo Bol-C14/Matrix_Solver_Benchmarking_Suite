@@ -6,7 +6,7 @@ import numpy as np
 from pathlib import Path
 import logging
 from tqdm import tqdm
-import psutil
+import argparse
 
 # Configure logging
 logger = logging.getLogger()
@@ -36,13 +36,14 @@ logger.addHandler(console_handler)
 
 
 class KluBenchmark:
-    def __init__(self, engine, database_folder, timeout=60):
+    def __init__(self, engine, database_folder, timeout=60, output_dir="."):
         """
         Initialize the KluBenchmark class with the engine path, database folder, and timeout.
         """
         self.engine = engine
         self.database_folder = Path(database_folder)
         self.timeout = timeout
+        self.output_dir = Path(output_dir)
         self.df = pd.DataFrame(columns=[
             "index", "mtx", "algorithmname", "threads", "nnz", "rows", "Analyze", "Factorization"
         ])
@@ -140,17 +141,22 @@ class KluBenchmark:
 
         logger.info("Benchmark completed for all matrices")
         logger.debug(f"Final DataFrame: \n{self.df}")
-        self.df.to_csv('results_klu_kernel.csv', index=False)
-        logger.info('Results saved to results_klu_kernel.csv')
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        out_file = self.output_dir / 'results_klu_kernel.csv'
+        self.df.to_csv(out_file, index=False)
+        logger.info(f'Results saved to {out_file}')
         print('done!')
 
 
 # Example usage of the class
 if __name__ == "__main__":
-    # Update the engine path and database folder as per your setup
-    engine = './lib/klu_new/src/klu_kernel.o'
-    database_folder = './data/ss_organized_data'
+    parser = argparse.ArgumentParser(description="Run KLU benchmark (new version)")
+    parser.add_argument("--engine", type=str, default="./lib/klu_new/src/klu_kernel.o", help="Path to KLU kernel executable")
+    parser.add_argument("--database_folder", type=str, default="./data/ss_organized_data", help="Directory with matrix files")
+    parser.add_argument("--output_dir", type=str, default="./data/results/klu", help="Directory to store result CSV")
+    parser.add_argument("--timeout", type=int, default=60, help="Timeout for each run in seconds")
+    args = parser.parse_args()
 
-    klu_benchmark = KluBenchmark(engine, database_folder)
+    klu_benchmark = KluBenchmark(args.engine, args.database_folder, timeout=args.timeout, output_dir=args.output_dir)
     klu_benchmark.find_mtx_files()
     klu_benchmark.run_benchmark()

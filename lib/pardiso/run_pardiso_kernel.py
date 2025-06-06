@@ -7,15 +7,17 @@ import logging
 from pathlib import Path
 from tqdm import tqdm
 import psutil
+import argparse
 
 class PardisoKernelBenchmark:
-    def __init__(self, engine='./pardiso_kernel.o', database_folder="/mnt/c/Work/transient-simulation/Random_Circuit_Generator/random_circuit_matrixs", timeout=100, log_level=logging.INFO):
+    def __init__(self, engine='./pardiso_kernel.o', database_folder="/mnt/c/Work/transient-simulation/Random_Circuit_Generator/random_circuit_matrixs", timeout=100, log_level=logging.INFO, output_dir="."):
         """
         Initialize the PardisoKernelBenchmark class with paths, timeout, and logging configurations.
         """
         self.engine = engine
         self.database_folder = Path(database_folder)
         self.timeout = timeout
+        self.output_dir = Path(output_dir)
         self.df = pd.DataFrame(columns=["index", "mtx", "algorithmname", "threads", "nnz", "rows", "Analyze", "Factorization"])
 
         # Set up logging based on log level
@@ -111,11 +113,13 @@ class PardisoKernelBenchmark:
                 logging.debug(f"Memory usage: {psutil.virtual_memory().percent}%")
 
         logging.info("PARDISO benchmarks completed.")
-        self.df.to_csv('results_pardiso_kernel.csv', index=False)
-        logging.info("Results saved to results_pardiso_kernel.csv")
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        out_file = self.output_dir / 'results_pardiso_kernel.csv'
+        self.df.to_csv(out_file, index=False)
+        logging.info(f"Results saved to {out_file}")
 
 # Wrapper function for external usage
-def run_pardiso_benchmark(engine='./pardiso_kernel.o', database_folder="/mnt/c/Work/transient-simulation/Random_Circuit_Generator/random_circuit_matrixs", timeout=100, log_level=logging.INFO, repetitions=100, thread_values=[1, 4, 8, 12, 24, 32]):
+def run_pardiso_benchmark(engine='./pardiso_kernel.o', database_folder="./data/ss_organized_data", timeout=100, log_level=logging.INFO, repetitions=100, thread_values=[1, 4, 8, 12, 24, 32], output_dir="."):
     """
     Run the PARDISO kernel benchmark with adjustable parameters.
     """
@@ -123,10 +127,24 @@ def run_pardiso_benchmark(engine='./pardiso_kernel.o', database_folder="/mnt/c/W
         engine=engine,
         database_folder=database_folder,
         timeout=timeout,
-        log_level=log_level
+        log_level=log_level,
+        output_dir=output_dir
     )
     pardiso_benchmark.process_matrices(repetitions=repetitions, thread_values=thread_values)
 
 # Run the main processing function only if executed directly
 if __name__ == "__main__":
-    run_pardiso_benchmark()
+    parser = argparse.ArgumentParser(description="Run PARDISO kernel benchmark")
+    parser.add_argument("--engine", type=str, default="./pardiso_kernel.o", help="Path to PARDISO executable")
+    parser.add_argument("--database_folder", type=str, default="./data/ss_organized_data", help="Directory with matrix files")
+    parser.add_argument("--output_dir", type=str, default="./data/results/pardiso", help="Directory to store result CSV")
+    parser.add_argument("--timeout", type=int, default=100, help="Timeout for each run in seconds")
+    parser.add_argument("--repetitions", type=int, default=100, help="Repetitions for each matrix")
+    parser.add_argument("--thread_values", nargs='+', type=int, default=[1,4,8,12,24,32], help="Thread counts")
+    parser.add_argument("--log_level", type=str, default="INFO", help="Logging level")
+    args = parser.parse_args()
+
+    log_level = getattr(logging, args.log_level.upper(), logging.INFO)
+    run_pardiso_benchmark(engine=args.engine, database_folder=args.database_folder, timeout=args.timeout,
+                          log_level=log_level, repetitions=args.repetitions, thread_values=args.thread_values,
+                          output_dir=args.output_dir)

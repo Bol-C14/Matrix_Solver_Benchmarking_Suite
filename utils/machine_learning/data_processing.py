@@ -1,6 +1,7 @@
 import os
 import zipfile
 import pandas as pd
+from utils.result_schema import STANDARD_COLUMNS, normalize_result
 
 def load_and_merge_data(zip_dir, file_groups, source_labels):
     """
@@ -52,38 +53,8 @@ def load_and_merge_data(zip_dir, file_groups, source_labels):
 
                 kernel_name = kernel_map[filename]
                 with zf.open(filename) as f:
-                    kernel_df = pd.read_csv(f)
-
-                    # Standardize factorization columns
-                    # GLU has Factorization_1, Factorization_2
-                    # KLU/NICSLU/PARDISO typically have Factorization
-                    # We'll rename them to consistent columns in final table:
-                    #   Factorization_1 (if it exists)
-                    #   Factorization_2 (if it exists)
-                    #   Factorization (if it exists)
-                    # Then the final effective_time will pick min across them.
-
-                    # For result_glu_kernel.csv, rename columns to consistent naming:
-                    if kernel_name == 'glu':
-                        # Usually: Factorization_1, Factorization_2 present
-                        # If they don't exist, we skip them
-                        if 'Factorization_1' not in kernel_df.columns:
-                            kernel_df['Factorization_1'] = None
-                        if 'Factorization_2' not in kernel_df.columns:
-                            kernel_df['Factorization_2'] = None
-
-                    elif kernel_name in ['klu', 'nicslu', 'pardiso']:
-                        # Typically only one factorization column named 'Factorization'
-                        if 'Factorization_1' not in kernel_df.columns:
-                            kernel_df['Factorization_1'] = None
-                        if 'Factorization_2' not in kernel_df.columns:
-                            kernel_df['Factorization_2'] = None
-                        if 'Factorization' not in kernel_df.columns:
-                            # If missing, set as None
-                            kernel_df['Factorization'] = None
-
-                    # Add the 'kernel' and 'source' columns for clarity
-                    kernel_df['kernel'] = kernel_name
+                    raw_df = pd.read_csv(f)
+                    kernel_df = normalize_result(raw_df, kernel_name)
                     kernel_df['source'] = source_label
 
                     # Merge with matrix features
@@ -142,6 +113,18 @@ def preprocess_data(combined_data):
     processed_data = processed_data[processed_data['effective_time'] >= 0]
 
     return processed_data
+
+
+def append_results(normalized_df: pd.DataFrame, processed_file: str) -> pd.DataFrame:
+    """Append new normalized results to processed_file, avoiding duplicates."""
+    if os.path.exists(processed_file):
+        existing = pd.read_csv(processed_file)
+        combined = pd.concat([existing, normalized_df], ignore_index=True)
+        combined.drop_duplicates(subset=["mtx", "kernel"], keep="last", inplace=True)
+    else:
+        combined = normalized_df.copy()
+    combined.to_csv(processed_file, index=False)
+    return combined
 
 def main():
     # 1) Define the data directory
