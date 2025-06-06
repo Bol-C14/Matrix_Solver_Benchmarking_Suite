@@ -9,14 +9,16 @@ from tqdm import tqdm
 import psutil
 
 
+import argparse
 class GluKernelBenchmark:
-    def __init__(self, engine='./glu_kernel', database_folder="/mnt/c/Work/transient-simulation/Random_Circuit_Generator/random_circuit_matrixs", timeout=100, log_level=logging.INFO):
+    def __init__(self, engine='./glu_kernel', database_folder="/mnt/c/Work/transient-simulation/Random_Circuit_Generator/random_circuit_matrixs", timeout=100, log_level=logging.INFO, output_dir="."):
         """
         Initialize the GluKernelBenchmark class with the engine path, database folder, timeout, and log level.
         """
         self.engine = engine
         self.database_folder = Path(database_folder)
         self.timeout = timeout
+        self.output_dir = Path(output_dir)
         self.df = pd.DataFrame(columns=["index", "mtx", "algorithmname", "threads", "nnz", "rows", "Analyze", "Factorization_1", "Factorization_2"])
         
         # Set up logging
@@ -143,21 +145,32 @@ class GluKernelBenchmark:
             logging.debug(f"Memory usage: {psutil.virtual_memory().percent}%")
 
         logging.info("Benchmark completed for all matrices")
-        self.df.to_csv('results_glu_kernel.csv', index=False)
-        logging.info("Results saved to results_glu_kernel.csv")
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        out_file = self.output_dir / 'results_glu_kernel.csv'
+        self.df.to_csv(out_file, index=False)
+        logging.info(f"Results saved to {out_file}")
 
     def custom_sort(self, matrix_name):
         parts = matrix_name.split('_')
         return int(parts[2]), int(parts[3])
 
 # Wrapper function for external usage
-def run_benchmark(engine='./glu_kernel', database_folder="/home/gushu/work/MLtask/ML_Circuit_Matrix_Analysis/data/ss_organized_data", timeout=100, log_level=logging.INFO):
+def run_benchmark(engine='./glu_kernel', database_folder="./data/ss_organized_data", timeout=100, log_level=logging.INFO, output_dir="."):
     """
     Run the GLU kernel benchmark with adjustable parameters.
     """
-    benchmark = GluKernelBenchmark(engine=engine, database_folder=database_folder, timeout=timeout, log_level=log_level)
+    benchmark = GluKernelBenchmark(engine=engine, database_folder=database_folder, timeout=timeout, log_level=log_level, output_dir=output_dir)
     benchmark.process_matrices()
 
 # Example usage of the class in a standalone script
 if __name__ == "__main__":
-    run_benchmark()
+    parser = argparse.ArgumentParser(description="Run GLU kernel benchmark")
+    parser.add_argument("--engine", type=str, default="./glu_kernel", help="Path to GLU kernel executable")
+    parser.add_argument("--database_folder", type=str, default="./data/ss_organized_data", help="Directory with matrix files")
+    parser.add_argument("--output_dir", type=str, default="./data/results/glu", help="Directory to store result CSV")
+    parser.add_argument("--timeout", type=int, default=100, help="Timeout for each run in seconds")
+    parser.add_argument("--log_level", type=str, default="INFO", help="Logging level")
+    args = parser.parse_args()
+
+    log_level = getattr(logging, args.log_level.upper(), logging.INFO)
+    run_benchmark(engine=args.engine, database_folder=args.database_folder, timeout=args.timeout, log_level=log_level, output_dir=args.output_dir)

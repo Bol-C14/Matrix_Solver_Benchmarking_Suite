@@ -9,13 +9,15 @@ from tqdm import tqdm
 import time
 
 
+import argparse
 class SuperluBenchmark:
-    def __init__(self, database_folder, timeout=100):
+    def __init__(self, database_folder, timeout=100, output_dir="."):
         """
         Initialize the SuperluBenchmark class with the database folder and timeout.
         """
         self.database_folder = Path(database_folder)
         self.timeout = timeout
+        self.output_dir = Path(output_dir)
         self.df = pd.DataFrame(columns=[
             "index", "mtx", "algorithmname", "threads", "nnz", "rows", "Analyze",
             "Factorization", "Read", "RHS_Creation", "Average_Solve"
@@ -136,16 +138,25 @@ class SuperluBenchmark:
                 continue
 
         logging.info(f"Final DataFrame: \n{self.df}")
-        self.df.to_csv('results_superlu_scipy.csv', index=False)
-        logging.info('Results saved to results_superlu_scipy.csv')
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        out_file = self.output_dir / 'results_superlu_scipy.csv'
+        self.df.to_csv(out_file, index=False)
+        logging.info(f'Results saved to {out_file}')
         print('done!')
 
 
 # Example usage of the class
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    parser = argparse.ArgumentParser(description="Run SuperLU benchmark using SciPy")
+    parser.add_argument("--database_folder", type=str, default="./data/ss_organized_data", help="Directory with matrix files")
+    parser.add_argument("--output_dir", type=str, default="./data/results/superlu", help="Directory to store result CSV")
+    parser.add_argument("--timeout", type=int, default=100, help="Timeout for each run in seconds")
+    parser.add_argument("--log_level", type=str, default="INFO", help="Logging level")
+    args = parser.parse_args()
 
-    database_folder = "/mnt/c/Work/transient-simulation/Random_Circuit_Generator/random_circuit_matrixs"
-    superlu_benchmark = SuperluBenchmark(database_folder)
+    log_level = getattr(logging, args.log_level.upper(), logging.INFO)
+    logging.basicConfig(level=log_level, format='%(asctime)s - %(levelname)s - %(message)s')
+
+    superlu_benchmark = SuperluBenchmark(args.database_folder, timeout=args.timeout, output_dir=args.output_dir)
     superlu_benchmark.find_mtx_files()
     superlu_benchmark.run_benchmark()

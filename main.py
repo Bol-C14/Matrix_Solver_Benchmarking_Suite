@@ -7,6 +7,9 @@ from pathlib import Path
 import os
 import argparse
 import shutil  # Added import for file operations
+import pandas as pd
+from utils.result_schema import normalize_result
+from utils.machine_learning.data_processing import append_results
 
 from utils.suitesparse_handler import SuiteSparseManager
 from lib.random_circuit_generator import run_circuit_generation
@@ -67,6 +70,7 @@ CIRCUIT_OUTPUT_DIR = WORKSPACE_PATH / "data" / "circuit_data"
 SS_ORGANIZED_DATA_DIR = WORKSPACE_PATH / "data" / "ss_organized_data"  # Directory for organized .mtx files
 GENERATED_MATRICES_DIR = WORKSPACE_PATH / "data" / "generated_matrices"  # Directory for pure_random_generator's output
 
+RESULTS_DIR = WORKSPACE_PATH / "data" / "results"
 
 # Ensure output directories exist
 CIRCUIT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -74,9 +78,10 @@ SUITE_SPARSE_DATA_DIR.mkdir(parents=True, exist_ok=True)
 SS_ORGANIZED_DATA_DIR.mkdir(parents=True, exist_ok=True)  # Ensure ss_organized_data exists
 GENERATED_MATRICES_DIR.mkdir(parents=True, exist_ok=True)  # Ensure generated_matrices exists
 
+RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Benchmarking Functions
-def run_klu(logger, database_folder):
+def run_klu(logger, database_folder, output_dir):
     # Set library paths for KLU dependencies
     lib_paths = [
         "./lib/klu_new/src/SuiteSparse-stable/lib",
@@ -95,7 +100,7 @@ def run_klu(logger, database_folder):
 
     # Initialize the benchmark
     logger.info(f"Initializing KLU benchmark with engine: {engine_path}")
-    klu_benchmark = KluBenchmark(engine_path, database_folder)
+    klu_benchmark = KluBenchmark(engine_path, database_folder, output_dir=output_dir)
 
     # Find all .mtx files in the database folder
     klu_benchmark.find_mtx_files()
@@ -105,7 +110,7 @@ def run_klu(logger, database_folder):
     logger.info("KLU Benchmarking completed.")
 
 
-def run_nicslu(logger, database_folder):
+def run_nicslu(logger, database_folder, output_dir):
     # Set the path to NICSLU shared library directory relative to the repo root
     lib_path = str(Path("./lib/nicslu/src/linux/lib_centos6_x64_gcc482_fma/int32").resolve())
 
@@ -119,7 +124,8 @@ def run_nicslu(logger, database_folder):
     nicslu_tester = NICSLUTester(
         database_folder=database_folder,
         engine_path=engine_path,
-        timeout=100
+        timeout=100,
+        output_dir=output_dir
     )
 
     # Define parameters for the benchmark
@@ -131,7 +137,7 @@ def run_nicslu(logger, database_folder):
     logger.info("NICSLU Benchmarking completed.")
 
 
-def run_glu(logger, database_folder):
+def run_glu(logger, database_folder, output_dir):
     engine_path = "./lib/glu/src/glu_kernel"  # Ensure this is correctly built if necessary
     logger.info(f"Initializing GLU benchmark with engine: {engine_path}")
 
@@ -140,7 +146,8 @@ def run_glu(logger, database_folder):
         engine=engine_path,
         database_folder=database_folder,
         timeout=100,
-        log_level=logging.DEBUG  # Change this as needed
+        log_level=logging.DEBUG,  # Change this as needed
+        output_dir=output_dir
     )
 
     # Run the benchmark
@@ -148,7 +155,7 @@ def run_glu(logger, database_folder):
     logger.info("GLU Benchmarking completed.")
 
 
-def run_pardiso(logger, database_folder):
+def run_pardiso(logger, database_folder, output_dir):
     engine_path = "./lib/pardiso/pardiso_kernel.o"  # Ensure this is correctly compiled as an executable
     timeout = 120
     log_level = logging.INFO
@@ -160,7 +167,8 @@ def run_pardiso(logger, database_folder):
         engine=engine_path,
         database_folder=database_folder,
         timeout=timeout,
-        log_level=log_level
+        log_level=log_level,
+        output_dir=output_dir
     )
 
     # Run the process_matrices method with specified repetitions and threads
@@ -168,9 +176,9 @@ def run_pardiso(logger, database_folder):
     logger.info("PARDISO Benchmarking completed.")
 
 
-def run_superlu(logger, database_folder):
+def run_superlu(logger, database_folder, output_dir):
     logger.info("Initializing SuperLU benchmark.")
-    superlu_benchmark = SuperluBenchmark(database_folder, timeout=100)
+    superlu_benchmark = SuperluBenchmark(database_folder, timeout=100, output_dir=output_dir)
 
     # Find .mtx files in the database folder
     superlu_benchmark.find_mtx_files()
@@ -261,8 +269,17 @@ def main():
     group.add_argument("--use_pure_random", action='store_true', help="Use pure random generator to create matrices")
     parser.add_argument("--download_only", action='store_true', help="Only download and organize SuiteSparse matrices")
     parser.add_argument("--log_level", type=str, default="INFO", help="Logging level: DEBUG, INFO, WARNING, ERROR, CRITICAL")
+    parser.add_argument("--run_klu", action='store_true', help="Run KLU benchmark")
+    parser.add_argument("--run_nicslu", action='store_true', help="Run NICSLU benchmark")
+    parser.add_argument("--run_glu", action='store_true', help="Run GLU benchmark")
+    parser.add_argument("--run_pardiso", action='store_true', help="Run PARDISO benchmark")
+    parser.add_argument("--run_superlu", action='store_true', help="Run SuperLU benchmark")
     # Future argument for neural network generator can be added here
     args = parser.parse_args()
+
+    # If no specific solver flags provided, run all benchmarks
+    if not any([args.run_klu, args.run_nicslu, args.run_glu, args.run_pardiso, args.run_superlu]):
+        args.run_klu = args.run_nicslu = args.run_glu = args.run_pardiso = args.run_superlu = True
 
     # Set up logging based on the command-line argument
     log_level = getattr(logging, args.log_level.upper(), logging.INFO)
@@ -297,11 +314,26 @@ def main():
     # Uncomment the benchmarks you wish to run if not already included in the routines above
     # For example, if run_pure_random_generation_and_benchmark runs benchmarks, you don't need to run them here
     # Alternatively, if you wish to run additional benchmarks, add here
-    run_klu(logger, database_folder)
-    run_nicslu(logger, database_folder)
-    run_glu(logger, database_folder)
-    run_pardiso(logger, database_folder)
-    # run_superlu(logger, database_folder)
+    if args.run_klu:
+        run_klu(logger, database_folder, RESULTS_DIR / 'klu')
+        df = pd.read_csv(RESULTS_DIR / 'klu' / 'results_klu_kernel.csv')
+        append_results(normalize_result(df, 'klu'), RESULTS_DIR / 'processed_data.csv')
+    if args.run_nicslu:
+        run_nicslu(logger, database_folder, RESULTS_DIR / 'nicslu')
+        df = pd.read_csv(RESULTS_DIR / 'nicslu' / 'results_nicslu_kernel.csv')
+        append_results(normalize_result(df, 'nicslu'), RESULTS_DIR / 'processed_data.csv')
+    if args.run_glu:
+        run_glu(logger, database_folder, RESULTS_DIR / 'glu')
+        df = pd.read_csv(RESULTS_DIR / 'glu' / 'results_glu_kernel.csv')
+        append_results(normalize_result(df, 'glu'), RESULTS_DIR / 'processed_data.csv')
+    if args.run_pardiso:
+        run_pardiso(logger, database_folder, RESULTS_DIR / 'pardiso')
+        df = pd.read_csv(RESULTS_DIR / 'pardiso' / 'results_pardiso_kernel.csv')
+        append_results(normalize_result(df, 'pardiso'), RESULTS_DIR / 'processed_data.csv')
+    if args.run_superlu:
+        run_superlu(logger, database_folder, RESULTS_DIR / 'superlu')
+        df = pd.read_csv(RESULTS_DIR / 'superlu' / 'results_superlu_scipy.csv')
+        append_results(normalize_result(df, 'superlu'), RESULTS_DIR / 'processed_data.csv')
 
 
 if __name__ == "__main__":
